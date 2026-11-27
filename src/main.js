@@ -6,6 +6,7 @@ import { createBoard, setupWall } from "./board.js";
 import { createStones } from "./stones.js";
 import { addSitFrames, sitFramePos } from "./ground-sit.js";
 import { createCapybara, CAPY_NEAR, CAPY_RADIUS, PHRASES as CAPY_PHRASES } from "./capybara.js";
+import { createLucario, LUCARIO_NEAR, LUCARIO_RADIUS } from "./lucario.js";
 import { createFishing, createFishingGear, FISH_NEAR, FISH_LEAVE } from "./fishing.js";
 
 // ---- Asset config (change here to use other files) ----
@@ -1693,6 +1694,114 @@ function capyWasFed(m) {
   if (Number.isInteger(m.phrase)) showBubble(capy.mesh, CAPY_PHRASES[Math.abs(m.phrase) % CAPY_PHRASES.length]);
 }
 
+// ---- Lucario (a permanent, room-clock NPC; E pets, R senses aura) ----
+const lucario = createLucario();
+scene.add(lucario.mesh, lucario.aura);
+lucario.mesh.position.set(0, 0, 0);
+const lucarioWalk = { on: false, min: 0, max: 0, z: 0, yAt: NaN };
+const LUCARIO_SPEED = 1.15;
+let lucarioInteraction = null; // private to this player; never changes the shared route
+
+function placeLucarioWalk() {
+  let best = null;
+  // Find the longest clear east-west stretch away from the capybara, board and furniture.
+  // Sampling the same static town geometry on every client gives every player the same route.
+  for (let z = 8; z <= 17; z += 0.5) {
+    let start = NaN;
+    for (let x = -20; x <= 20.5; x += 0.5) {
+      const clear = x <= 20 &&
+        isOpen(x, z, 1.1) &&
+        !inPond(x, z) &&
+        !insideSolid(x, z, 1.1, 1.1) &&
+        Math.abs(topHeight(x, z) - groundHeight(x, z)) < 0.4 &&
+        Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) > 5.5 &&
+        Math.hypot(x - board.position.x, z - board.position.z) > 6 &&
+        lampPosts.every((l) => Math.hypot(l.position.x - x, l.position.z - z) > 3) &&
+        benches.every((b) => Math.hypot(b.x - x, b.z - z) > 3.5);
+      if (clear) {
+        if (Number.isNaN(start)) start = x;
+      } else if (!Number.isNaN(start)) {
+        const end = x - 0.5;
+        if (!best || end - start > best.max - best.min) best = { min: start, max: end, z };
+        start = NaN;
+      }
+    }
+    if (!Number.isNaN(start)) {
+      const end = 20;
+      if (!best || end - start > best.max - best.min) best = { min: start, max: end, z };
+    }
+  }
+  if (!best || best.max - best.min < 7) {
+    // If this map version has no suitable patrol lane, keep Lucario safely off the main spawn.
+    for (let z = 8; z <= 18; z += 0.5) {
+      for (let x = -18; x <= 18; x += 0.5) {
+        if (isOpen(x, z, 1) && Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) > 5 &&
+            Math.hypot(x - board.position.x, z - board.position.z) > 6) {
+          lucario.mesh.position.set(x, groundHeight(x, z), z);
+          lucarioWalk.on = false;
+          return;
+        }
+      }
+    }
+    lucario.mesh.visible = false;
+    return;
+  }
+  Object.assign(lucarioWalk, { on: true, ...best });
+  lucario.mesh.position.set((best.min + best.max) / 2, groundHeight((best.min + best.max) / 2, best.z), best.z);
+}
+
+function walkLucario(t) {
+  if (!lucarioWalk.on) {
+    lucario.setPose("idle");
+    return;
+  }
+  const length = lucarioWalk.max - lucarioWalk.min;
+  const along = ((t / 1000) * LUCARIO_SPEED) % (2 * length);
+  const x = lucarioWalk.min + (along < length ? along : 2 * length - along);
+  lucario.mesh.position.x = x;
+  if (Math.abs(x - lucarioWalk.yAt) > 0.35) {
+    lucario.mesh.position.y = groundHeight(x, lucarioWalk.z);
+    lucarioWalk.yAt = x;
+  }
+  lucario.mesh.position.z = lucarioWalk.z;
+  lucario.setFacing(along < length ? -1 : 1);
+  if (!lucarioInteraction || performance.now() >= lucarioInteraction.until) {
+    lucarioInteraction = null;
+    lucario.setPose("walk");
+  }
+}
+
+placeLucarioWalk();
+
+function nearLucario() {
+  return !gamePaused && mySeat < 0 && !wall.isOpen() && !nearBoard() &&
+    Math.hypot(pos.x - lucario.mesh.position.x, pos.z - lucario.mesh.position.z) < LUCARIO_NEAR;
+}
+
+function interactLucario(action) {
+  if (!nearLucario() || (lucarioInteraction && performance.now() < lucarioInteraction.until)) return;
+  lucario.setFacing(pos.x < lucario.mesh.position.x ? -1 : 1);
+  lucarioInteraction = { action, until: performance.now() + (action === "aura" ? 2600 : 2100) };
+  lucario.setPose(action === "aura" ? "aura" : "pet");
+  const phrases = action === "aura"
+    ? ["Lucario fecha os olhos. Uma aura azul envolve vocês por um instante.", "Ele parece perceber algo tranquilo na sua aura.", "Por um momento, vocês conseguem se entender sem palavras."]
+    : ["Lucario abaixa a cabeça, aceitando o carinho.", "Lucario parece gostar da sua companhia.", "Ele fecha os olhos e solta um pequeno suspiro satisfeito."];
+  showBubble(lucario.mesh, phrases[Math.floor(Math.random() * phrases.length)]);
+}
+
+function updateLucario() {
+  const t = roomNow();
+  walkLucario(t);
+  if (lucarioInteraction && performance.now() >= lucarioInteraction.until) {
+    lucarioInteraction = null;
+    lucario.setPose(lucarioWalk.on ? "walk" : "idle");
+  }
+  lucario.update(t);
+  lucario.mesh.rotation.set(camera.rotation.x * 0.5, 0, 0);
+  lucario.aura.position.set(lucario.mesh.position.x, lucario.mesh.position.y + 0.08, lucario.mesh.position.z);
+}
+
+
 // ---- Collision ----
 const BODY_RADIUS = 0.9; // character "width"
 const MAX_STEP = 1.2; // height difference it can climb
@@ -1717,6 +1826,8 @@ function isFree(x, z, currentY) {
   // the capybara is solid, but it moves: a step that takes you away from it is always allowed
   const toCapy = Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z);
   if (toCapy < CAPY_RADIUS + BODY_RADIUS * 0.5 && toCapy < Math.hypot(pos.x - capy.mesh.position.x, pos.z - capy.mesh.position.z)) return false;
+  const toLucario = Math.hypot(x - lucario.mesh.position.x, z - lucario.mesh.position.z);
+  if (toLucario < LUCARIO_RADIUS + BODY_RADIUS * 0.5 && toLucario < Math.hypot(pos.x - lucario.mesh.position.x, pos.z - lucario.mesh.position.z)) return false;
   if (Math.abs(x - board.position.x) < 3.8 + BODY_RADIUS * 0.5 && Math.abs(z - board.position.z) < 0.5 + BODY_RADIUS * 0.5) return false;
   for (const p of lampPosts)
     if (
@@ -2041,6 +2152,7 @@ gl_Position.z = (feetClip.z / feetClip.w) * gl_Position.w;`,
 }
 const myFeet = useFeetDepth(sprite);
 const capyFeet = useFeetDepth(capy.mesh);
+const lucarioFeet = useFeetDepth(lucario.mesh);
 const _toCam = new THREE.Vector3();
 const occlusionRay = new THREE.Ray();
 const _hit = new THREE.Vector3();
@@ -2071,6 +2183,7 @@ function setFeet(feet, x, y, z) {
 function updateOcclusion() {
   setFeet(myFeet, pos.x + slide.x, pos.y, pos.z + slide.z);
   setFeet(capyFeet, capy.mesh.position.x, capy.mesh.position.y, capy.mesh.position.z);
+  setFeet(lucarioFeet, lucario.mesh.position.x, lucario.mesh.position.y, lucario.mesh.position.z);
   for (const o of others.values()) setFeet(o.feet, o.mesh.position.x, o.mesh.position.y, o.mesh.position.z);
 }
 
@@ -3498,6 +3611,7 @@ function eAction(seat = nearestFreeSeat()) {
   if (p === "focus" || p === "bite") return "fish";
   if (mySeat >= 0) return "stand";
   if (nearBoard()) return "wall";
+  if (nearLucario()) return "lucario-pet";
   if (nearCapy()) return "capy";
   const spot = fishSpot();
   if (spot && (seat < 0 || spot.d < seatDistance(seat))) return "cast";
@@ -3509,12 +3623,21 @@ function doE(action = eAction()) {
   else if (action === "cast") fishSpot() && fishing.choose(castHere);
   else if (action === "wall") wall.show();
   else if (action === "capy") feedCapy();
+  else if (action === "lucario-pet") interactLucario("pet");
   else if (action === "stand" || action === "sit") toggleSit();
 }
 addEventListener("keydown", (e) => {
   if (typing() || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key.toLowerCase() === "e") doE();
 });
+// R normally controls rain; beside Lucario it becomes the aura interaction.
+// Capture phase prevents the existing rain shortcut from also firing.
+addEventListener("keydown", (e) => {
+  if (typing() || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.key.toLowerCase() !== "r" || !nearLucario()) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  interactLucario("aura");
+}, true);
 const fishBtn = document.querySelector("#fish");
 fishBtn.addEventListener("click", (e) => {
   if (!gamePaused) doE(fishing.phase() === "idle" ? "cast" : "fish");
@@ -3649,13 +3772,14 @@ function loop() {
   camera.position.set(pos.x + slide.x, pos.y + 38, pos.z + 42 + slide.z);
   camera.lookAt(pos.x + slide.x, pos.y + 1, pos.z + slide.z);
   updateCapy();
+  updateLucario();
   updateFishing();
   updateOcclusion();
   // facing the camera, tilted only halfway (the shadow looks like a standing body)
   sprite.rotation.set(camera.rotation.x * 0.5, 0, 0);
   showHeld(myHeld, sprite, CHARACTER.cfg, myHold, grounded ? null : heldDir(myHold, mySeat >= 0 ? seatSpot(mySeat) : null, !walking, dir));
 
-  updateLampShadows([sprite, capy.mesh, ...[...others.values()].map((o) => o.mesh)]);
+  updateLampShadows([sprite, capy.mesh, lucario.mesh, ...[...others.values()].map((o) => o.mesh)]);
   renderer.render(scene, camera);
   updateNameTags();
   updateBubbles();
