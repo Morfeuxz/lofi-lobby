@@ -1712,15 +1712,18 @@ function placeLucarioWalk() {
   for (const rx of [12, 14, 16]) {
     for (const rz of [10, 12, 14]) {
       const chamfer = 4;
+      // Shift the loop toward the upper half of the village so its lower edge
+      // stays clear of the capybara's road.
+      const routeCenterZ = Math.min(center.z, capy.mesh.position.z - rz - 11.5);
       const points = [
-        [center.x - rx + chamfer, center.z - rz],
-        [center.x + rx - chamfer, center.z - rz],
-        [center.x + rx, center.z - rz + chamfer],
-        [center.x + rx, center.z + rz - chamfer],
-        [center.x + rx - chamfer, center.z + rz],
-        [center.x - rx + chamfer, center.z + rz],
-        [center.x - rx, center.z + rz - chamfer],
-        [center.x - rx, center.z - rz + chamfer],
+        [center.x - rx + chamfer, routeCenterZ - rz],
+        [center.x + rx - chamfer, routeCenterZ - rz],
+        [center.x + rx, routeCenterZ - rz + chamfer],
+        [center.x + rx, routeCenterZ + rz - chamfer],
+        [center.x + rx - chamfer, routeCenterZ + rz],
+        [center.x - rx + chamfer, routeCenterZ + rz],
+        [center.x - rx, routeCenterZ + rz - chamfer],
+        [center.x - rx, routeCenterZ - rz + chamfer],
       ];
       const segments = [];
       let total = 0;
@@ -1735,7 +1738,7 @@ function placeLucarioWalk() {
           const x = a[0] + (b[0] - a[0]) * f;
           const z = a[1] + (b[1] - a[1]) * f;
           if (!isOpen(x, z, 2.25) ||
-              Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) < 13 ||
+              Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) < 11.5 ||
               Math.hypot(x - board.position.x, z - board.position.z) < 8 ||
               lampPosts.some((l) => Math.hypot(l.position.x - x, l.position.z - z) < 4.5) ||
               benches.some((b) => Math.hypot(b.x - x, b.z - z) < 5)) {
