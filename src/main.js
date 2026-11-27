@@ -4420,7 +4420,7 @@ let eNow = null;
  * animal (capybara or cat), and last the pond's edge or the free seat, whichever is closer.
  * Only that action's prompt shows.
  * @param {number} [seat] nearest free seat, if already known this frame
- * @returns {"fish" | "stand" | "wall" | "capy" | "cat" | "cast" | "sit" | null}
+ * @returns {"fish" | "stand" | "wall" | "capy" | "cat" | "lucario" | "cast" | "sit" | null}
  */
 function eAction(seat = nearestFreeSeat()) {
   if (gamePaused || wall.isOpen()) return null;
