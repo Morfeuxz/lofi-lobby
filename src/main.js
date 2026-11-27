@@ -4225,7 +4225,7 @@ function findLucarioPath(startIdx,endIdx,actors=[]){
     if(u===endIdx)break;
     for(const [v] of nodes[u].adj){
       if(!lucarioPatrolSet.has(v)||parent[v]!==-1)continue;
-      if(lucarioNodeBlocked(nodes[v],actors,endIdx,v))continue;
+      if(lucarioNodeBlocked(nodes[v],actors,startIdx,v))continue;
       parent[v]=u;queue[tail++]=v;
       if(v===endIdx){head=tail;break;}
     }
@@ -4235,12 +4235,16 @@ function findLucarioPath(startIdx,endIdx,actors=[]){
   for(let cur=endIdx;;cur=parent[cur]){path.push(nodes[cur]);if(cur===startIdx)break;}
   return path.reverse();
 }
-function lucarioTarget(slot,previous=-1){
+function lucarioTarget(slot,previous=-1,actors=[]){
   // Seeded pseudo-random selection: every browser picks the same waypoint for a
   // given room-clock slot, while the route still feels different each time.
   let seed=(Math.imul(slot+1,0x45d9f3b)^0x6d2b79f5)>>>0;
   seed^=seed>>>16;seed=Math.imul(seed,0x45d9f3b);seed^=seed>>>16;
-  const candidates=lucarioPatrolNodes.filter(i=>i!==previous);
+  const candidates=lucarioPatrolNodes.filter(i=>i!==previous&&
+    actors.every(actor=>{
+      const n=catNav.nodes[i];
+      return Math.hypot(n.x-actor.x,n.z-actor.z)>actor.r+1.2;
+    }));
   return candidates.length?candidates[(seed>>>0)%candidates.length]:lucarioPatrolNodes[0];
 }
 function lucarioNearestPatrolNode(x,z){
@@ -4256,8 +4260,8 @@ function planLucarioRoute(slot,now){
   const current=lucario.mesh.position;
   const startIdx=lucarioNearestPatrolNode(current.x,current.z);
   if(startIdx<0)return false;
-  const targetIdx=lucarioTarget(slot,lucarioRoute.targetIdx);
   const actors=lucarioActorPositions();
+  const targetIdx=lucarioTarget(slot,lucarioRoute.targetIdx,actors);
   // The current node may be inside the player's personal-space radius; allow
   // Lucario to leave it, but all later nodes must give people room.
   const pathNodes=findLucarioPath(startIdx,targetIdx,actors);
