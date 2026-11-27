@@ -1006,7 +1006,7 @@ for (const l of lampLights) (l.shadow.autoUpdate = false), (l.userData.shadowSta
 function markLampShadowsStale() {
   for (const l of lampLights) l.userData.shadowStale = true;
 }
-const SHADOW_REACH = 3; // a trainer's sprite is 5 units tall: past the light's range it can still reach in
+const SHADOW_REACH = 8; // tall sprites can project their shadow several units beyond the light's ground footprint
 const SHADOW_STEP = 0.25; // about one texel of a lamp's 512 shadow map, a few units from the lamp
 const drawnMovers = new Map(); // object -> { x, y, z, look, px, py, pz }: where its shadow was drawn, and last frame's spot
 const _lampAt = new THREE.Vector3();
@@ -2678,10 +2678,22 @@ lucarioShadowCtx.fillStyle=lucarioShadowGradient;
 lucarioShadowCtx.fillRect(0,0,64,64);
 const lucarioGroundShadow=new THREE.Mesh(
   new THREE.PlaneGeometry(2.15,.92),
-  new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(lucarioShadowCanvas),transparent:true,depthWrite:false,side:THREE.DoubleSide}),
+  new THREE.MeshBasicMaterial({
+    map:new THREE.CanvasTexture(lucarioShadowCanvas),
+    color:0x25232a,
+    transparent:true,
+    opacity:.9,
+    depthTest:true,
+    depthWrite:false,
+    polygonOffset:true,
+    polygonOffsetFactor:-2,
+    polygonOffsetUnits:-2,
+    side:THREE.DoubleSide,
+    toneMapped:false,
+  }),
 );
 lucarioGroundShadow.rotation.x=-Math.PI/2;
-lucarioGroundShadow.position.y=.018;
+lucarioGroundShadow.position.y=.04;
 lucarioGroundShadow.renderOrder=8;
 lucarioGroundShadow.visible=false;
 scene.add(lucarioGroundShadow);
@@ -4366,8 +4378,13 @@ function updateLucario(){
   lucario.mesh.rotation.set(camera.rotation.x*.5,0,0);
   const lx=lucario.mesh.position.x,lz=lucario.mesh.position.z;
   lucarioGroundShadow.visible=lucario.mesh.visible;
-  // Keep the shadow almost flush with the sampled ground to avoid a visible gap.
-  lucarioGroundShadow.position.set(lx,groundHeight(lx,lz)+.006,lz);
+  // Keep the contact shadow above the terrain depth surface without z-fighting.
+  lucarioGroundShadow.position.set(lx,groundHeight(lx,lz)+.04,lz);
+  if (lucario.mesh.visible) {
+    lucario.mesh.castShadow = true;
+    lucario.mesh.customDepthMaterial.side = THREE.DoubleSide;
+    lucario.mesh.customDistanceMaterial.side = THREE.DoubleSide;
+  }
   lucarioGroundShadow.material.opacity=lucarioInteraction?.action === "aura" ? 0.42 : 0.76;
   lucario.aura.position.set(lx,lucario.mesh.position.y+.08,lz);
   const show=nearLucario()&&!typing()&&!bubbles.has(lucario.mesh);

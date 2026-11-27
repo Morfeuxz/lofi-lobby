@@ -10,22 +10,22 @@ const TICK_MS = 1000 / 60;
 const SHEETS = {
   walk: {
     file: "Walk-Anim.png", columns: 4, rows: 8, frameWidth: 32, frameHeight: 48,
-    footAnchor: 0.42,
+    footAnchor: 0.37,
     durations: [6, 6, 6, 6],
   },
   idle: {
     file: "Idle-Anim.png", columns: 6, rows: 8, frameWidth: 32, frameHeight: 56,
-    footAnchor: 0.39,
+    footAnchor: 0.35,
     durations: [40, 2, 2, 4, 2, 2],
   },
   pet: {
     file: "Nod-Anim.png", columns: 3, rows: 8, frameWidth: 32, frameHeight: 48,
-    footAnchor: 0.43,
+    footAnchor: 0.37,
     durations: [6, 8, 6],
   },
   aura: {
     file: "Charge-Anim.png", columns: 10, rows: 8, frameWidth: 32, frameHeight: 40,
-    footAnchor: 0.45,
+    footAnchor: 0.36,
     durations: Array(10).fill(2),
   },
 };
@@ -94,10 +94,12 @@ export function createLucario() {
     map: initial.texture,
     alphaTest: .5,
     depthPacking: THREE.RGBADepthPacking,
+    side: THREE.DoubleSide,
   });
   mesh.customDistanceMaterial = new THREE.MeshDistanceMaterial({
     map: initial.texture,
     alphaTest: .5,
+    side: THREE.DoubleSide,
   });
   mesh.castShadow = true;
   // A modest increase keeps Lucario readable beside the capybara and trainers.
