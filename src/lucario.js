@@ -70,11 +70,11 @@ export function createLucario() {
     return [pose, { ...config, texture }];
   }));
 
-  // Measure the opaque bottom edge per pose, direction and frame. This removes
-  // transparent atlas padding instead of guessing a single offset per animation.
-  const geometryFor = (sheet) => new THREE.PlaneGeometry(sheet.frameWidth / sheet.frameHeight, 1);
-  let currentFootAnchor = 0.5;
-  const frameAnchor = (sheet, frame, row) => {
+  // Crop each animation frame to its opaque pixels and normalize its visible height.
+  // The source sheets have different canvas heights (40, 48 and 56 px); using the
+  // full cell aspect ratio made Lucario grow/shrink whenever its pose changed.
+  const VISIBLE_HEIGHT = 1;
+  const frameBounds = (sheet, frame, row) => {
     const image = sheet.texture.image;
     if (!image?.width || !image?.height) return null;
     if (!sheet.alphaPixels) {
@@ -85,20 +85,48 @@ export function createLucario() {
         sheet.alphaPixels = ctx.getImageData(0, 0, image.width, image.height).data;
       } catch { return null; }
     }
-    sheet.footAnchors ??= new Map();
+    sheet.frameBounds ??= new Map();
     const key = row * sheet.columns + frame;
-    if (sheet.footAnchors.has(key)) return sheet.footAnchors.get(key);
-    const pixels = sheet.alphaPixels, x0 = frame * sheet.frameWidth, y0 = row * sheet.frameHeight;
-    let bottom = -1;
-    for (let y = sheet.frameHeight - 1; y >= 0 && bottom < 0; y--) {
+    if (sheet.frameBounds.has(key)) return sheet.frameBounds.get(key);
+    const pixels = sheet.alphaPixels;
+    const x0 = frame * sheet.frameWidth, y0 = row * sheet.frameHeight;
+    let minX = sheet.frameWidth, minY = sheet.frameHeight, maxX = -1, maxY = -1;
+    for (let y = 0; y < sheet.frameHeight; y++) {
       const py = (y0 + y) * image.width;
       for (let x = 0; x < sheet.frameWidth; x++) {
-        if (pixels[(py + x0 + x) * 4 + 3] >= 128) { bottom = y; break; }
+        if (pixels[(py + x0 + x) * 4 + 3] < 32) continue;
+        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
       }
     }
-    const anchor = bottom < 0 ? 0.5 : 0.5 - (sheet.frameHeight - bottom - 1) / sheet.frameHeight;
-    sheet.footAnchors.set(key, anchor);
-    return anchor;
+    if (maxX < minX || maxY < minY) return null;
+    // Use the central lower portion to locate the paws, ignoring a tail or aura
+    // that may extend below the body at the edge of the frame.
+    const footMinX = Math.floor(sheet.frameWidth * .2);
+    const footMaxX = Math.ceil(sheet.frameWidth * .8);
+    let footY = -1;
+    for (let y = maxY; y >= minY && footY < 0; y--) {
+      const py = (y0 + y) * image.width;
+      for (let x = footMinX; x < footMaxX; x++) {
+        if (pixels[(py + x0 + x) * 4 + 3] >= 32) { footY = y; break; }
+      }
+    }
+    if (footY < 0) footY = maxY;
+    // A one-pixel transparent border prevents texture filtering from shaving outlines.
+    const x = Math.max(0, minX - 1), y = Math.max(0, minY - 1);
+    const right = Math.min(sheet.frameWidth - 1, maxX + 1);
+    const bottom = Math.min(sheet.frameHeight - 1, maxY + 1);
+    const bounds = { x, y, width: right - x + 1, height: bottom - y + 1, footY };
+    sheet.frameBounds.set(key, bounds);
+    return bounds;
+  };
+  const geometryFor = (bounds) => {
+    const geometry = new THREE.PlaneGeometry(bounds.width / bounds.height, VISIBLE_HEIGHT);
+    // PlaneGeometry is centered. Move it so the lower edge of the paw pixels
+    // sits at local y=0, which is the mesh's sampled ground position.
+    const footFromTop = bounds.footY - bounds.y + 1;
+    geometry.translate(0, (footFromTop / bounds.height - .5) * VISIBLE_HEIGHT, 0);
+    return geometry;
   };
   const initial = sheets.idle;
   const material = new THREE.MeshLambertMaterial({
@@ -127,17 +155,22 @@ export function createLucario() {
   let lastFrame = -1;
   let poseStartedAt = performance.now();
 
+  let lastSheet = null;
+  let lastRow = -1;
   const setFrame = (frame, sheet) => {
-    if (frame !== lastFrame) {
-      lastFrame = frame;
-      sheet.texture.offset.set(frame / sheet.columns, 1 - (directionRow + 1) / sheet.rows);
-    }
-    // TextureLoader is asynchronous: retry until the image pixels are available.
-    const anchor = frameAnchor(sheet, frame, directionRow);
-    if (anchor !== null && Math.abs(anchor - currentFootAnchor) > 0.0001) {
-      mesh.geometry.translate(0, anchor - currentFootAnchor, 0);
-      currentFootAnchor = anchor;
-    }
+    if (frame === lastFrame && sheet === lastSheet && directionRow === lastRow) return;
+    const bounds = frameBounds(sheet, frame, directionRow);
+    if (!bounds) return; // Keep the previous valid frame until the texture is ready.
+    lastFrame = frame;
+    lastSheet = sheet;
+    lastRow = directionRow;
+    const image = sheet.texture.image;
+    const x = frame * sheet.frameWidth + bounds.x;
+    const y = directionRow * sheet.frameHeight + bounds.y;
+    sheet.texture.repeat.set(bounds.width / image.width, bounds.height / image.height);
+    sheet.texture.offset.set(x / image.width, 1 - (y + bounds.height) / image.height);
+    mesh.geometry.dispose();
+    mesh.geometry = geometryFor(bounds);
   };
 
   const setPose = (next) => {
@@ -149,8 +182,8 @@ export function createLucario() {
 
     const sheet = sheets[pose];
     mesh.geometry.dispose();
-    mesh.geometry = geometryFor(sheet);
-    currentFootAnchor = 0.5;
+    lastSheet = null;
+    lastRow = -1;
     material.map = sheet.texture;
     material.needsUpdate = true;
     mesh.customDepthMaterial.map = sheet.texture;

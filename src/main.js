@@ -4505,7 +4505,7 @@ function updateLucario(){
   const lx=lucario.mesh.position.x,lz=lucario.mesh.position.z;
   lucarioGroundShadow.visible = lucario.mesh.visible;
   // Match the player's contact shadow offset; the sprite and shadow share the same ground sample.
-  lucarioGroundShadow.position.set(lx, groundHeight(lx, lz) + 0.015, lz);
+  lucarioGroundShadow.position.set(lx, lucario.mesh.position.y + 0.002, lz);
   lucarioGroundShadow.material.opacity = lucarioInteraction?.action === "aura" ? 0.22 : 0.35;
   lucario.mesh.castShadow = true;
   lucario.aura.position.set(lx,lucario.mesh.position.y+.08,lz);
