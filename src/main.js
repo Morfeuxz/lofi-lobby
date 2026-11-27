@@ -4125,13 +4125,14 @@ function placeLucarioWalk(){
   const center=townBox.getCenter(new THREE.Vector3());
   const suitable=(node,maxCenter,minCapy)=>
     Math.hypot(node.x-center.x,node.z-center.z)<maxCenter&&
+    node.z<capy.mesh.position.z-9&&
     Math.hypot(node.x-capy.mesh.position.x,node.z-capy.mesh.position.z)>minCapy&&
     Math.hypot(node.x-board.position.x,node.z-board.position.z)>8&&
     lampPosts.every(p=>Math.hypot(p.position.x-node.x,p.position.z-node.z)>3.5)&&
     benches.every(b=>Math.hypot(b.x-node.x,b.z-node.z)>4.5);
   let candidates=nodes.map((node,index)=>({node,index})).filter(({node})=>suitable(node,27,11));
   if(candidates.length<8)candidates=nodes.map((node,index)=>({node,index})).filter(({node})=>suitable(node,32,8));
-  if(candidates.length<2)candidates=nodes.map((node,index)=>({node,index})).filter(({node})=>Math.hypot(node.x-capy.mesh.position.x,node.z-capy.mesh.position.z)>8);
+  if(candidates.length<2)candidates=nodes.map((node,index)=>({node,index})).filter(({node})=>node.z<capy.mesh.position.z-7&&Math.hypot(node.x-capy.mesh.position.x,node.z-capy.mesh.position.z)>8);
   lucarioPatrolNodes=candidates.map(({index})=>index);
   if(lucarioPatrolNodes.length<2){lucario.mesh.visible=false;return;}
   const first=nodes[lucarioPatrolNodes[0]];
@@ -4139,7 +4140,8 @@ function placeLucarioWalk(){
 }
 function lucarioTarget(slot){
   const n=lucarioPatrolNodes.length;
-  const i=((slot*17+11)%n+n)%n;
+  const step=n%2===0?n-1:n-2;
+  const i=((slot*step+11)%n+n)%n;
   return lucarioPatrolNodes[i];
 }
 function walkLucario(t){
