@@ -4361,7 +4361,7 @@ function updateLucario(){
   const lx=lucario.mesh.position.x,lz=lucario.mesh.position.z;
   lucarioGroundShadow.visible=lucario.mesh.visible;
   lucarioGroundShadow.position.set(lx,groundHeight(lx,lz)+.035,lz);
-  lucarioGroundShadow.material.opacity=lucarioInteraction?.action==="aura"?.32:.52;
+  lucarioGroundShadow.material.opacity=lucarioInteraction?.action === "aura" ? 0.32 : 0.52;
   lucario.aura.position.set(lx,lucario.mesh.position.y+.08,lz);
   const show=nearLucario()&&!typing()&&!bubbles.has(lucario.mesh);
   lucarioPrompt.style.display=show?"flex":"none";
