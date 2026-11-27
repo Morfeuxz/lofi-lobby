@@ -94,12 +94,10 @@ export function createLucario() {
     map: initial.texture,
     alphaTest: .5,
     depthPacking: THREE.RGBADepthPacking,
-    side: THREE.DoubleSide,
   });
   mesh.customDistanceMaterial = new THREE.MeshDistanceMaterial({
     map: initial.texture,
     alphaTest: .5,
-    side: THREE.DoubleSide,
   });
   mesh.castShadow = true;
   // A modest increase keeps Lucario readable beside the capybara and trainers.

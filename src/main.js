@@ -2667,35 +2667,20 @@ const lucario = createLucario();
 scene.add(lucario.mesh, lucario.aura);
 lucario.mesh.visible = false;
 const lucarioFeet = useFeetDepth(lucario.mesh);
-const lucarioShadowCanvas=Object.assign(document.createElement("canvas"),{width:64,height:64});
-const lucarioShadowCtx=lucarioShadowCanvas.getContext("2d");
-const lucarioShadowGradient=lucarioShadowCtx.createRadialGradient(32,32,5,32,32,29);
-lucarioShadowGradient.addColorStop(0,"rgba(0,0,0,.62)");
-lucarioShadowGradient.addColorStop(.42,"rgba(0,0,0,.42)");
-lucarioShadowGradient.addColorStop(.78,"rgba(0,0,0,.16)");
-lucarioShadowGradient.addColorStop(1,"rgba(0,0,0,0)");
-lucarioShadowCtx.fillStyle=lucarioShadowGradient;
-lucarioShadowCtx.fillRect(0,0,64,64);
-const lucarioGroundShadow=new THREE.Mesh(
-  new THREE.PlaneGeometry(2.15,.92),
+// Use the same contact-shadow setup as the player: a flat circle with the
+// shared radial glow texture, placed directly on the sampled ground.
+const lucarioGroundShadow = new THREE.Mesh(
+  new THREE.CircleGeometry(0.85, 20),
   new THREE.MeshBasicMaterial({
-    map:new THREE.CanvasTexture(lucarioShadowCanvas),
-    color:0x25232a,
-    transparent:true,
-    opacity:.9,
-    depthTest:true,
-    depthWrite:false,
-    polygonOffset:true,
-    polygonOffsetFactor:-2,
-    polygonOffsetUnits:-2,
-    side:THREE.DoubleSide,
-    toneMapped:false,
+    map: glowTexture,
+    color: 0x000000,
+    transparent: true,
+    opacity: 0.35,
+    depthWrite: false,
   }),
 );
-lucarioGroundShadow.rotation.x=-Math.PI/2;
-lucarioGroundShadow.position.y=.04;
-lucarioGroundShadow.renderOrder=8;
-lucarioGroundShadow.visible=false;
+lucarioGroundShadow.rotation.x = -Math.PI / 2;
+lucarioGroundShadow.visible = false;
 scene.add(lucarioGroundShadow);
 
 const _toCam = new THREE.Vector3();
@@ -4377,15 +4362,11 @@ function updateLucario(){
   lucario.update(performance.now());
   lucario.mesh.rotation.set(camera.rotation.x*.5,0,0);
   const lx=lucario.mesh.position.x,lz=lucario.mesh.position.z;
-  lucarioGroundShadow.visible=lucario.mesh.visible;
-  // Keep the contact shadow above the terrain depth surface without z-fighting.
-  lucarioGroundShadow.position.set(lx,groundHeight(lx,lz)+.04,lz);
-  if (lucario.mesh.visible) {
-    lucario.mesh.castShadow = true;
-    lucario.mesh.customDepthMaterial.side = THREE.DoubleSide;
-    lucario.mesh.customDistanceMaterial.side = THREE.DoubleSide;
-  }
-  lucarioGroundShadow.material.opacity=lucarioInteraction?.action === "aura" ? 0.42 : 0.76;
+  lucarioGroundShadow.visible = lucario.mesh.visible;
+  // Match the player's contact shadow offset; the sprite and shadow share the same ground sample.
+  lucarioGroundShadow.position.set(lx, groundHeight(lx, lz) + 0.05, lz);
+  lucarioGroundShadow.material.opacity = lucarioInteraction?.action === "aura" ? 0.22 : 0.35;
+  lucario.mesh.castShadow = true;
   lucario.aura.position.set(lx,lucario.mesh.position.y+.08,lz);
   const show=nearLucario()&&!typing()&&!bubbles.has(lucario.mesh);
   lucarioPrompt.style.display=show?"flex":"none";
