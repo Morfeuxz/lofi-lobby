@@ -1700,56 +1700,72 @@ const lucario = createLucario();
 scene.add(lucario.mesh, lucario.aura);
 lucario.mesh.visible = false; // show only after the town geometry has loaded
 lucario.mesh.position.set(0, 0, 0);
-const lucarioWalk = { on: false, min: 0, max: 0, z: 0, yAt: NaN };
-const LUCARIO_SPEED = 0.52;
+const lucarioWalk = { on: false, points: [], segments: [], total: 0 };
+const LUCARIO_SPEED = 0.72;
 let lucarioInteraction = null; // private to this player; never changes the shared route
 
 function placeLucarioWalk() {
-  // The capybara owns the lower road. Lucario patrols the central village crossroad
-  // (the east-west path around z=-6), with deterministic sampling on every client.
-  let best = null;
-  const minX = Math.ceil((townBox.min.x + 5) * 2) / 2;
-  const maxX = Math.floor((townBox.max.x - 5) * 2) / 2;
-  const lanes = [-6, -3, 0, 3, 6, -9, 9];
-  for (const z of lanes) {
-    let start = NaN;
-    for (let x = minX; x <= maxX + 0.5; x += 0.5) {
-      const clear = x <= maxX &&
-        isOpen(x, z, 2.35) &&
-        Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) > 9 &&
-        Math.hypot(x - board.position.x, z - board.position.z) > 7 &&
-        lampPosts.every((l) => Math.hypot(l.position.x - x, l.position.z - z) > 4.2) &&
-        benches.every((b) => Math.hypot(b.x - x, b.z - z) > 4.8);
-      if (clear) {
-        if (Number.isNaN(start)) start = x;
-      } else if (!Number.isNaN(start)) {
-        const end = x - 0.5;
-        const candidate = { min: start, max: end, z };
-        const score = (candidate.max - candidate.min) - Math.abs(z + 6) * 0.65;
-        const bestScore = best ? (best.max - best.min) - Math.abs(best.z + 6) * 0.65 : -Infinity;
-        if (score > bestScore) best = candidate;
-        start = NaN;
+  // Build a chamfered loop around the center of the village, rather than
+  // choosing a single straight road. The same geometry checks run for every client.
+  const center = townBox.getCenter(new THREE.Vector3());
+  const candidates = [];
+  for (let rx = 10; rx <= 19; rx += 1) {
+    for (let rz = 8; rz <= 16; rz += 1) {
+      const chamfer = 4;
+      const points = [
+        [center.x - rx + chamfer, center.z - rz],
+        [center.x + rx - chamfer, center.z - rz],
+        [center.x + rx, center.z - rz + chamfer],
+        [center.x + rx, center.z + rz - chamfer],
+        [center.x + rx - chamfer, center.z + rz],
+        [center.x - rx + chamfer, center.z + rz],
+        [center.x - rx, center.z + rz - chamfer],
+        [center.x - rx, center.z - rz + chamfer],
+      ];
+      const segments = [];
+      let total = 0;
+      let clear = true;
+      for (let i = 0; i < points.length && clear; i++) {
+        const a = points[i];
+        const b = points[(i + 1) % points.length];
+        const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const steps = Math.ceil(length / 0.8);
+        for (let j = 0; j <= steps; j++) {
+          const f = j / steps;
+          const x = a[0] + (b[0] - a[0]) * f;
+          const z = a[1] + (b[1] - a[1]) * f;
+          if (!isOpen(x, z, 2.25) ||
+              Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) < 13 ||
+              Math.hypot(x - board.position.x, z - board.position.z) < 8 ||
+              lampPosts.some((l) => Math.hypot(l.position.x - x, l.position.z - z) < 4.5) ||
+              benches.some((b) => Math.hypot(b.x - x, b.z - z) < 5)) {
+            clear = false;
+            break;
+          }
+        }
+        segments.push({ a, b, length, start: total });
+        total += length;
       }
-    }
-    if (!Number.isNaN(start)) {
-      const candidate = { min: start, max: maxX, z };
-      const score = (candidate.max - candidate.min) - Math.abs(z + 6) * 0.65;
-      const bestScore = best ? (best.max - best.min) - Math.abs(best.z + 6) * 0.65 : -Infinity;
-      if (score > bestScore) best = candidate;
+      if (clear) {
+        // Prefer a generous loop that stays close to the village center.
+        const score = total - Math.abs(rx - 14) * 1.5 - Math.abs(rz - 12) * 1.5;
+        candidates.push({ points, segments, total, score });
+      }
     }
   }
 
-  if (!best || best.max - best.min < 8) {
-    // Never spawn inside a building if this map variant has no safe central lane.
+  candidates.sort((a, b) => b.score - a.score);
+  const route = candidates[0];
+  if (!route) {
     lucario.mesh.visible = false;
     lucarioWalk.on = false;
     return;
   }
 
+  Object.assign(lucarioWalk, { on: true, ...route });
+  const first = route.points[0];
+  lucario.mesh.position.set(first[0], groundHeight(first[0], first[1]), first[1]);
   lucario.mesh.visible = true;
-  Object.assign(lucarioWalk, { on: true, ...best, yAt: NaN });
-  const centerX = (best.min + best.max) / 2;
-  lucario.mesh.position.set(centerX, groundHeight(centerX, best.z), best.z);
 }
 
 function walkLucario(t) {
@@ -1757,22 +1773,23 @@ function walkLucario(t) {
     lucario.setPose("idle");
     return;
   }
-  const length = lucarioWalk.max - lucarioWalk.min;
-  const along = ((t / 1000) * LUCARIO_SPEED) % (2 * length);
-  const x = lucarioWalk.min + (along < length ? along : 2 * length - along);
-  lucario.mesh.position.x = x;
-  if (!Number.isFinite(lucarioWalk.yAt) || Math.abs(x - lucarioWalk.yAt) > 0.35) {
-    lucario.mesh.position.y = groundHeight(x, lucarioWalk.z);
-    lucarioWalk.yAt = x;
-  }
-  lucario.mesh.position.z = lucarioWalk.z;
+
+  const distance = ((t / 1000) * LUCARIO_SPEED) % lucarioWalk.total;
+  const segment = lucarioWalk.segments.find((part) =>
+    distance >= part.start && distance < part.start + part.length
+  ) || lucarioWalk.segments[lucarioWalk.segments.length - 1];
+  const progress = (distance - segment.start) / segment.length;
+  const dx = segment.b[0] - segment.a[0];
+  const dz = segment.b[1] - segment.a[1];
+  const x = segment.a[0] + dx * progress;
+  const z = segment.a[1] + dz * progress;
+
+  lucario.mesh.position.set(x, groundHeight(x, z), z);
   if (!lucarioInteraction || performance.now() >= lucarioInteraction.until) {
     lucarioInteraction = null;
-    lucario.setFacing(along < length ? -1 : 1);
-    lucario.setPose("walk");
+    lucario.setDirection(dx, dz);
   }
 }
-
 function nearLucario() {
   return lucario.mesh.visible && !gamePaused && mySeat < 0 && !wall.isOpen() && !nearBoard() &&
     Math.hypot(pos.x - lucario.mesh.position.x, pos.z - lucario.mesh.position.z) < LUCARIO_NEAR;
