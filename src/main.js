@@ -2084,7 +2084,8 @@ function samplePathPoint(path, cumDist, totalDist, dist) {
     x: a.x + dx * frac,
     y: a.y + (b.y - a.y) * frac,
     z: a.z + dz * frac,
-    dir: Math.abs(dx) >= Math.abs(dz) ? (dx >= 0 ? "right" : "left") : dz >= 0 ? "down" : "up",
+    dirX: dx,
+    dirZ: dz,
   };
 }
 
@@ -4149,13 +4150,30 @@ function findLucarioPath(startIdx,endIdx){
   if(!lucarioPatrolSet.has(startIdx)||!lucarioPatrolSet.has(endIdx))return [nodes[startIdx]];
   const parent=new Int32Array(nodes.length).fill(-1);
   const queue=new Int32Array(nodes.length);
+  const byCell=new Map(nodes.map((node,index)=>[
+    `${Math.round(node.x/CAT_NAV_STEP)},${Math.round(node.z/CAT_NAV_STEP)}`,index,
+  ]));
+  const offsets=[
+    [-1,-1],[1,-1],[-1,1],[1,1],
+    [1,0],[-1,0],[0,1],[0,-1],
+  ];
   let head=0,tail=0;
   parent[startIdx]=startIdx;queue[tail++]=startIdx;
   while(head<tail){
     const u=queue[head++];
     if(u===endIdx)break;
-    for(const [v] of nodes[u].adj){
-      if(!lucarioPatrolSet.has(v)||parent[v]!==-1)continue;
+    const from=nodes[u];
+    for(const [sx,sz] of offsets){
+      const v=byCell.get(`${Math.round(from.x/CAT_NAV_STEP)+sx},${Math.round(from.z/CAT_NAV_STEP)+sz}`);
+      if(v===undefined||!lucarioPatrolSet.has(v)||parent[v]!==-1)continue;
+      // A diagonal is allowed only when both adjoining cardinal cells are
+      // walkable too, preventing Lucario from cutting through obstacle corners.
+      if(sx&&sz){
+        const sideX=byCell.get(`${Math.round(from.x/CAT_NAV_STEP)+sx},${Math.round(from.z/CAT_NAV_STEP)}`);
+        const sideZ=byCell.get(`${Math.round(from.x/CAT_NAV_STEP)},${Math.round(from.z/CAT_NAV_STEP)+sz}`);
+        if(sideX===undefined||sideZ===undefined||
+          !lucarioPatrolSet.has(sideX)||!lucarioPatrolSet.has(sideZ))continue;
+      }
       parent[v]=u;queue[tail++]=v;
       if(v===endIdx){head=tail;break;}
     }
@@ -4197,8 +4215,8 @@ function walkLucario(t){
   const distance=Math.min(totalDist,elapsed/1000*LUCARIO_SPEED);
   const point=samplePathPoint(path,cumDist,totalDist,distance);
   lucario.mesh.position.set(point.x,point.y,point.z);
-  const directions={right:[1,0],left:[-1,0],down:[0,1],up:[0,-1]};
-  const [dx,dz]=directions[point.dir]||[0,0];lucario.setDirection(dx,dz);
+  lucario.setDirection(point.dirX,point.dirZ);
+  lucario.setPose("walk");
 }
 function nearLucario(){
   return lucario.mesh.visible&&!gamePaused&&mySeat<0&&!wall.isOpen()&&!nearBoard()&&
@@ -4206,7 +4224,10 @@ function nearLucario(){
 }
 function interactLucario(action){
   if(!nearLucario()||(lucarioInteraction&&performance.now()<lucarioInteraction.until))return;
-  lucario.setFacing(pos.x<lucario.mesh.position.x?-1:1);
+  lucario.setDirection(
+    pos.x-lucario.mesh.position.x,
+    pos.z-lucario.mesh.position.z,
+  );
   lucarioInteraction={action,startedAt:roomNow(),until:performance.now()+(action==="aura"?2400:1900)};
   lucario.setPose(action==="aura"?"aura":"pet");
   const phrases=action==="aura"
