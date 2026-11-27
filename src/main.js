@@ -4120,7 +4120,8 @@ const LUCARIO_LEG_MS=26000;
 const LUCARIO_SPEED=2.15; // slightly slower than the cats (2.4–2.7 units/s)
 let lucarioPatrolNodes=[];
 let lucarioPatrolSet=new Set();
-let lucarioInteraction=null; // local reaction only; never changes the shared patrol
+let lucarioPausedMs=0;
+let lucarioInteraction=null; // local reaction and route pause only; shared patrol clock resumes from its saved offset
 function placeLucarioWalk(){
   const nodes=catNav.nodes;
   if(!nodes.length){lucario.mesh.visible=false;return;}
@@ -4173,12 +4174,19 @@ function lucarioTarget(slot){
 function walkLucario(t){
   const nodes=catNav.nodes;
   if(!lucario.mesh.visible||lucarioPatrolNodes.length<2||!nodes.length){lucario.setPose("idle");return;}
-  if(lucarioInteraction&&performance.now()<lucarioInteraction.until)return;
-  const slot=Math.floor(t/LUCARIO_LEG_MS);
+  if(lucarioInteraction){
+    if(performance.now()<lucarioInteraction.until){lucario.setPose(lucarioInteraction.action==="aura"?"aura":"pet");return;}
+    // Add the interaction duration to the local patrol clock so the same path
+    // continues from the exact point where the player stopped Lucario.
+    lucarioPausedMs+=Math.max(0,t-lucarioInteraction.startedAt);
+    lucarioInteraction=null;
+  }
+  const patrolTime=Math.max(0,t-lucarioPausedMs);
+  const slot=Math.floor(patrolTime/LUCARIO_LEG_MS);
   const path=findLucarioPath(lucarioTarget(slot-1),lucarioTarget(slot));
   if(path.length<2){const node=nodes[lucarioTarget(slot)];lucario.mesh.position.set(node.x,node.y,node.z);lucario.setPose("idle");return;}
   const {cumDist,totalDist}=measurePath(path);
-  const elapsed=t-slot*LUCARIO_LEG_MS;
+  const elapsed=patrolTime-slot*LUCARIO_LEG_MS;
   const walkMs=Math.min(LUCARIO_LEG_MS,totalDist/LUCARIO_SPEED*1000);
   if(elapsed>=walkMs){
     const end=path[path.length-1];
@@ -4199,7 +4207,7 @@ function nearLucario(){
 function interactLucario(action){
   if(!nearLucario()||(lucarioInteraction&&performance.now()<lucarioInteraction.until))return;
   lucario.setFacing(pos.x<lucario.mesh.position.x?-1:1);
-  lucarioInteraction={action,until:performance.now()+(action==="aura"?2400:1900)};
+  lucarioInteraction={action,startedAt:roomNow(),until:performance.now()+(action==="aura"?2400:1900)};
   lucario.setPose(action==="aura"?"aura":"pet");
   const phrases=action==="aura"
     ?["Lucario fecha os olhos. Uma aura azul envolve vocês por um instante.","Ele parece perceber algo tranquilo na sua aura.","Por um momento, vocês conseguem se entender sem palavras."]
@@ -4223,17 +4231,6 @@ lucarioPrompt.append(makeLucarioAction("E","fazer carinho","pet"),makeLucarioAct
 document.body.append(lucarioPrompt);
 function updateLucario(){
   const t=roomNow();walkLucario(t);
-  if(lucarioInteraction&&performance.now()>=lucarioInteraction.until){
-    lucarioInteraction=null;
-    const slot=Math.floor(t/LUCARIO_LEG_MS);
-    const path=findLucarioPath(lucarioTarget(slot-1),lucarioTarget(slot));
-    if(path.length>1){
-      const {cumDist,totalDist}=measurePath(path);
-      const point=samplePathPoint(path,cumDist,totalDist,totalDist*((t-slot*LUCARIO_LEG_MS)/LUCARIO_LEG_MS));
-      const directions={right:[1,0],left:[-1,0],down:[0,1],up:[0,-1]};
-      const [dx,dz]=directions[point.dir]||[0,0];lucario.setDirection(dx,dz);
-    }else lucario.setPose("idle");
-  }
   lucario.update(t);
   lucario.mesh.rotation.set(camera.rotation.x*.5,0,0);
   lucario.aura.position.set(lucario.mesh.position.x,lucario.mesh.position.y+.08,lucario.mesh.position.z);
