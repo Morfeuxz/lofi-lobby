@@ -3753,7 +3753,7 @@ function addToHistory(name, text, id, admin, color, prs = 0) {
   if (atBottom || name === NAME) elMsgs.scrollTop = elMsgs.scrollHeight;
 }
 
-function showBubble(owner, text, mention = false) {
+function showBubble(owner, text, mention = false, durationMs = null) {
   let b = bubbles.get(owner);
   if (!b) {
     b = {
@@ -3768,7 +3768,7 @@ function showBubble(owner, text, mention = false) {
     Object.assign(document.createElement("span"), { textContent: text }),
   );
   b.el.style.opacity = 1;
-  b.until = performance.now() + 4000 + text.length * 60; // stays longer if long
+  b.until = performance.now() + (durationMs ?? 4000 + text.length * 60); // optional short-lived NPC reactions
 }
 
 // ---- Admin: click a name (above a trainer or in the chat) to kick or ban ----
@@ -4116,7 +4116,8 @@ catPrompt.addEventListener("click", (e) => {
 });
 document.body.append(catPrompt);
 // ---- Lucario: permanent NPC using the town's shared cat navigation grid ----
-const LUCARIO_LEG_MS=28000;
+const LUCARIO_LEG_MS=26000;
+const LUCARIO_SPEED=2.15; // slightly slower than the cats (2.4–2.7 units/s)
 let lucarioPatrolNodes=[];
 let lucarioInteraction=null; // local reaction only; never changes the shared patrol
 function placeLucarioWalk(){
@@ -4152,8 +4153,16 @@ function walkLucario(t){
   const path=findCatPath(lucarioTarget(slot-1),lucarioTarget(slot));
   if(path.length<2){const node=nodes[lucarioTarget(slot)];lucario.mesh.position.set(node.x,node.y,node.z);lucario.setPose("idle");return;}
   const {cumDist,totalDist}=measurePath(path);
-  const progress=(t-slot*LUCARIO_LEG_MS)/LUCARIO_LEG_MS;
-  const point=samplePathPoint(path,cumDist,totalDist,totalDist*progress);
+  const elapsed=t-slot*LUCARIO_LEG_MS;
+  const walkMs=Math.min(LUCARIO_LEG_MS,totalDist/LUCARIO_SPEED*1000);
+  if(elapsed>=walkMs){
+    const end=path[path.length-1];
+    lucario.mesh.position.set(end.x,end.y,end.z);
+    lucario.setPose("idle");
+    return;
+  }
+  const distance=Math.min(totalDist,elapsed/1000*LUCARIO_SPEED);
+  const point=samplePathPoint(path,cumDist,totalDist,distance);
   lucario.mesh.position.set(point.x,point.y,point.z);
   const directions={right:[1,0],left:[-1,0],down:[0,1],up:[0,-1]};
   const [dx,dz]=directions[point.dir]||[0,0];lucario.setDirection(dx,dz);
@@ -4170,7 +4179,7 @@ function interactLucario(action){
   const phrases=action==="aura"
     ?["Lucario fecha os olhos. Uma aura azul envolve vocês por um instante.","Ele parece perceber algo tranquilo na sua aura.","Por um momento, vocês conseguem se entender sem palavras."]
     :["Lucario abaixa a cabeça, aceitando o carinho.","Lucario parece gostar da sua companhia.","Ele fecha os olhos e solta um pequeno suspiro satisfeito."];
-  showBubble(lucario.mesh,phrases[Math.floor(Math.random()*phrases.length)]);
+  showBubble(lucario.mesh,phrases[Math.floor(Math.random()*phrases.length)],false,1800);
 }
 const lucarioPrompt=Object.assign(document.createElement("div"),{id:"lucario-prompt"});
 Object.assign(lucarioPrompt.style,{
