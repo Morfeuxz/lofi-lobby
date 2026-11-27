@@ -4214,16 +4214,14 @@ function interactLucario(action){
     :["Lucario abaixa a cabeça, aceitando o carinho.","Lucario parece gostar da sua companhia.","Ele fecha os olhos e solta um pequeno suspiro satisfeito."];
   showBubble(lucario.mesh,phrases[Math.floor(Math.random()*phrases.length)],false,1800);
 }
+// Two native prompt buttons, matching the capybara and cat interactions.
 const lucarioPrompt=Object.assign(document.createElement("div"),{id:"lucario-prompt"});
 Object.assign(lucarioPrompt.style,{
-  position:"fixed",transform:"translate(-50%,-100%)",zIndex:"4",display:"none",gap:"6px",
-  padding:"6px",borderRadius:"7px",background:"rgba(10,11,16,.9)",
-  border:"1px solid rgba(255,255,255,.2)",color:"#F2F2F5",font:"10px Silkscreen, monospace",whiteSpace:"nowrap",
+  position:"fixed",transform:"translate(-50%,-100%)",zIndex:"4",display:"none",gap:"6px",whiteSpace:"nowrap",
 });
 const makeLucarioAction=(key,label,action)=>{
-  const button=Object.assign(document.createElement("button"),{type:"button",textContent:MOBILE?label:key+" · "+label});
-  Object.assign(button.style,{font:"inherit",color:"#F2F2F5",background:"rgba(255,255,255,.06)",
-    border:"1px solid rgba(255,255,255,.2)",borderRadius:"5px",padding:"6px 8px",cursor:"pointer"});
+  const button=Object.assign(capyPrompt.cloneNode(false),{id:"",type:"button"});
+  button.innerHTML=MOBILE?label:`<kbd>${key}</kbd> ${label}`;
   button.addEventListener("click",e=>{interactLucario(action);e.currentTarget.blur();});
   return button;
 };
