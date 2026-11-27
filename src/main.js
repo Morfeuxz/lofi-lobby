@@ -4171,18 +4171,20 @@ function placeLucarioWalk(){
       (carouselDistance>=CAROUSEL.base+2&&carouselDistance<=16);
     return nearPond||nearFair;
   };
-  lucarioPatrolNodes=nodes.map((node,index)=>({node,index}))
-    .filter(({node})=>suitable(node)).map(({index})=>index);
-  lucarioPatrolSet=new Set(lucarioPatrolNodes);
+  const routeNodes=nodes.map((node,index)=>({node,index}))
+    .filter(({node})=>node.z>frontLimit&&lucarioClearOfFixedObjects(node)&&
+      Math.hypot(node.x-capy.mesh.position.x,node.z-capy.mesh.position.z)>5.5)
+    .map(({index})=>index);
+  // The corridor is broader than the waypoint ring: it connects the pond and
+  // fairground while still excluding the rear-house side of the village.
+  lucarioPatrolSet=new Set(routeNodes);
+  lucarioPatrolNodes=routeNodes.filter(index=>suitable(nodes[index]));
   if(lucarioPatrolNodes.length<8){
-    // Fallback stays in the southern/public half of the town, never at the back houses.
-    lucarioPatrolNodes=nodes.map((node,index)=>({node,index}))
-      .filter(({node})=>node.z>frontLimit&&
-        Math.hypot(node.x-townBox.getCenter(new THREE.Vector3()).x,node.z-townBox.getCenter(new THREE.Vector3()).z)<31&&
-        lucarioClearOfFixedObjects(node)&&
-        Math.hypot(node.x-capy.mesh.position.x,node.z-capy.mesh.position.z)>6)
-      .map(({index})=>index);
-    lucarioPatrolSet=new Set(lucarioPatrolNodes);
+    const center=townBox.getCenter(new THREE.Vector3());
+    lucarioPatrolNodes=routeNodes.filter(index=>{
+      const n=nodes[index];
+      return Math.hypot(n.x-center.x,n.z-center.z)<34;
+    });
   }
   if(lucarioPatrolNodes.length<2){lucario.mesh.visible=false;return;}
   const initial=lucarioPatrolNodes[Math.floor(lucarioPatrolNodes.length*.5)];
@@ -4260,7 +4262,7 @@ function planLucarioRoute(slot,now){
   // Lucario to leave it, but all later nodes must give people room.
   const pathNodes=findLucarioPath(startIdx,targetIdx,actors);
   if(pathNodes.length<2)return false;
-  const path=[{x:current.x,y:groundHeight(current.x,current.z),z:current.z},...pathNodes.slice(1)];
+  const path=[{x:current.x,y:groundHeight(current.x,current.z),z:current.z},...pathNodes];
   const measured=measurePath(path);
   lucarioRoute={slot,path,cumDist:measured.cumDist,totalDist:measured.totalDist,
     distance:0,targetIdx,lastPlan:now,lastTick:now};
@@ -4268,21 +4270,21 @@ function planLucarioRoute(slot,now){
 }
 function replanLucarioAroundActors(now){
   const route=lucarioRoute;
-  if(now-route.lastPlan<LUCARIO_REPLAN_MS||route.path.length<2)return;
+  if(now-route.lastPlan<LUCARIO_REPLAN_MS||(!route.waiting&&route.path.length<2))return;
   const actors=lucarioActorPositions();
   const current=lucario.mesh.position;
-  const next=samplePathPoint(route.path,route.cumDist,route.totalDist,
-    Math.min(route.totalDist,route.distance+2.2));
-  const blocked=actors.some(a=>distanceToSegment(a.x,a.z,current.x,current.z,next.x,next.z)<a.r+0.35);
+  const next=route.path.length>1?samplePathPoint(route.path,route.cumDist,route.totalDist,
+    Math.min(route.totalDist,route.distance+2.2)):current;
+  const blocked=route.waiting||actors.some(a=>distanceToSegment(a.x,a.z,current.x,current.z,next.x,next.z)<a.r+0.35);
   if(!blocked){route.lastPlan=now;return;}
   const startIdx=lucarioNearestPatrolNode(current.x,current.z);
   if(startIdx<0){route.lastPlan=now;return;}
   const detour=findLucarioPath(startIdx,route.targetIdx,actors);
   route.lastPlan=now;
-  if(detour.length<2)return; // wait rather than push through a player
-  const path=[{x:current.x,y:groundHeight(current.x,current.z),z:current.z},...detour.slice(1)];
+  if(detour.length<2){route.waiting=true;return;} // wait rather than push through a player
+  const path=[{x:current.x,y:groundHeight(current.x,current.z),z:current.z},...detour];
   const measured=measurePath(path);
-  route.path=path;route.cumDist=measured.cumDist;route.totalDist=measured.totalDist;route.distance=0;
+  route.path=path;route.cumDist=measured.cumDist;route.totalDist=measured.totalDist;route.distance=0;route.waiting=false;
 }
 function distanceToSegment(px,pz,ax,az,bx,bz){
   const dx=bx-ax,dz=bz-az,len2=dx*dx+dz*dz;
@@ -4309,6 +4311,7 @@ function walkLucario(t){
     }
   }
   replanLucarioAroundActors(now);
+  if(lucarioRoute.waiting||lucarioRoute.path.length<2){lucario.setPose("idle");return;}
   const dt=Math.min(.08,Math.max(0,(now-lucarioRoute.lastTick)/1000));
   lucarioRoute.lastTick=now;
   if(lucarioRoute.distance>=lucarioRoute.totalDist){
