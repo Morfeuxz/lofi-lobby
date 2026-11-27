@@ -10,18 +10,22 @@ const TICK_MS = 1000 / 60;
 const SHEETS = {
   walk: {
     file: "Walk-Anim.png", columns: 4, rows: 8, frameWidth: 32, frameHeight: 48,
+    footAnchor: 0.42,
     durations: [6, 6, 6, 6],
   },
   idle: {
     file: "Idle-Anim.png", columns: 6, rows: 8, frameWidth: 32, frameHeight: 56,
+    footAnchor: 0.39,
     durations: [40, 2, 2, 4, 2, 2],
   },
   pet: {
     file: "Nod-Anim.png", columns: 3, rows: 8, frameWidth: 32, frameHeight: 48,
+    footAnchor: 0.43,
     durations: [6, 8, 6],
   },
   aura: {
     file: "Charge-Anim.png", columns: 10, rows: 8, frameWidth: 32, frameHeight: 40,
+    footAnchor: 0.45,
     durations: Array(10).fill(2),
   },
 };
@@ -72,9 +76,10 @@ export function createLucario() {
 
   const geometryFor = (sheet) => {
     const geometry = new THREE.PlaneGeometry(sheet.frameWidth / sheet.frameHeight, 1);
-    // The source frames leave a few transparent pixels below the drawn feet.
-    // Lower the visible sprite slightly so its soles meet the ground shadow.
-    geometry.translate(0, .46, 0);
+    // Each animation sheet has a different transparent bottom margin.
+    // Anchor the last opaque pixel row to the ground instead of aligning the
+    // full transparent frame rectangle; this prevents the sprite hovering.
+    geometry.translate(0, sheet.footAnchor, 0);
     return geometry;
   };
   const initial = sheets.idle;
@@ -95,8 +100,8 @@ export function createLucario() {
     alphaTest: .5,
   });
   mesh.castShadow = true;
-  // Slightly larger than before, while staying close to the capybara/trainer scale.
-  mesh.scale.set(5.0, 5.0, 1);
+  // A modest increase keeps Lucario readable beside the capybara and trainers.
+  mesh.scale.set(5.4, 5.4, 1);
 
   const aura = createAura();
   let pose = "idle";

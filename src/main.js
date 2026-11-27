@@ -2669,18 +2669,19 @@ lucario.mesh.visible = false;
 const lucarioFeet = useFeetDepth(lucario.mesh);
 const lucarioShadowCanvas=Object.assign(document.createElement("canvas"),{width:64,height:64});
 const lucarioShadowCtx=lucarioShadowCanvas.getContext("2d");
-const lucarioShadowGradient=lucarioShadowCtx.createRadialGradient(32,32,4,32,32,30);
-lucarioShadowGradient.addColorStop(0,"rgba(0,0,0,.48)");
-lucarioShadowGradient.addColorStop(.55,"rgba(0,0,0,.27)");
+const lucarioShadowGradient=lucarioShadowCtx.createRadialGradient(32,32,5,32,32,29);
+lucarioShadowGradient.addColorStop(0,"rgba(0,0,0,.62)");
+lucarioShadowGradient.addColorStop(.42,"rgba(0,0,0,.42)");
+lucarioShadowGradient.addColorStop(.78,"rgba(0,0,0,.16)");
 lucarioShadowGradient.addColorStop(1,"rgba(0,0,0,0)");
 lucarioShadowCtx.fillStyle=lucarioShadowGradient;
 lucarioShadowCtx.fillRect(0,0,64,64);
 const lucarioGroundShadow=new THREE.Mesh(
-  new THREE.PlaneGeometry(2.9,1.3),
+  new THREE.PlaneGeometry(2.15,.92),
   new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(lucarioShadowCanvas),transparent:true,depthWrite:false,side:THREE.DoubleSide}),
 );
 lucarioGroundShadow.rotation.x=-Math.PI/2;
-lucarioGroundShadow.position.y=.035;
+lucarioGroundShadow.position.y=.018;
 lucarioGroundShadow.renderOrder=8;
 lucarioGroundShadow.visible=false;
 scene.add(lucarioGroundShadow);
@@ -4366,8 +4367,8 @@ function updateLucario(){
   const lx=lucario.mesh.position.x,lz=lucario.mesh.position.z;
   lucarioGroundShadow.visible=lucario.mesh.visible;
   // Keep the shadow almost flush with the sampled ground to avoid a visible gap.
-  lucarioGroundShadow.position.set(lx,groundHeight(lx,lz)+.012,lz);
-  lucarioGroundShadow.material.opacity=lucarioInteraction?.action === "aura" ? 0.32 : 0.52;
+  lucarioGroundShadow.position.set(lx,groundHeight(lx,lz)+.006,lz);
+  lucarioGroundShadow.material.opacity=lucarioInteraction?.action === "aura" ? 0.42 : 0.76;
   lucario.aura.position.set(lx,lucario.mesh.position.y+.08,lz);
   const show=nearLucario()&&!typing()&&!bubbles.has(lucario.mesh);
   lucarioPrompt.style.display=show?"flex":"none";
