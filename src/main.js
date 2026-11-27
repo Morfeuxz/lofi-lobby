@@ -1713,14 +1713,14 @@ function placeLucarioWalk() {
   for (let z = 8; z <= 17; z += 1.5) {
     let start = NaN;
     for (let x = minX; x <= maxX + 0.5; x += 0.5) {
+      // Lucario's sprite is wider than a trainer. Check the whole footprint, not
+      // only its center, so the patrol lane cannot skim a house wall or roof.
       const clear = x <= maxX &&
-        !inPond(x, z) &&
-        !insideSolid(x, z, 1.1, 1.1) &&
-        Math.abs(topHeight(x, z) - groundHeight(x, z)) < 0.4 &&
+        isOpen(x, z, 2.6) &&
         Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) > 5.5 &&
         Math.hypot(x - board.position.x, z - board.position.z) > 6 &&
-        lampPosts.every((l) => Math.hypot(l.position.x - x, l.position.z - z) > 3) &&
-        benches.every((b) => Math.hypot(b.x - x, b.z - z) > 3.5);
+        lampPosts.every((l) => Math.hypot(l.position.x - x, l.position.z - z) > 3.5) &&
+        benches.every((b) => Math.hypot(b.x - x, b.z - z) > 4);
       if (clear) {
         if (Number.isNaN(start)) start = x;
       } else if (!Number.isNaN(start)) {
@@ -1738,12 +1738,11 @@ function placeLucarioWalk() {
     // If this map version has no suitable patrol lane, keep Lucario safely off the main spawn.
     for (let z = 8; z <= 18; z += 0.5) {
       for (let x = minX; x <= maxX; x += 0.5) {
-        if (!inPond(x, z) && !insideSolid(x, z, 1, 1) &&
-            Math.abs(topHeight(x, z) - groundHeight(x, z)) < 0.4 &&
+        if (isOpen(x, z, 2.4) &&
             Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) > 5 &&
             Math.hypot(x - board.position.x, z - board.position.z) > 6 &&
-            lampPosts.every((l) => Math.hypot(l.position.x - x, l.position.z - z) > 3) &&
-            benches.every((b) => Math.hypot(b.x - x, b.z - z) > 3.5)) {
+            lampPosts.every((l) => Math.hypot(l.position.x - x, l.position.z - z) > 3.5) &&
+            benches.every((b) => Math.hypot(b.x - x, b.z - z) > 4)) {
           lucario.mesh.position.set(x, groundHeight(x, z), z);
           lucario.mesh.visible = true;
           lucarioWalk.on = false;
