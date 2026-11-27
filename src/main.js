@@ -1759,14 +1759,14 @@ function walkLucario(t) {
   const along = ((t / 1000) * LUCARIO_SPEED) % (2 * length);
   const x = lucarioWalk.min + (along < length ? along : 2 * length - along);
   lucario.mesh.position.x = x;
-  if (Math.abs(x - lucarioWalk.yAt) > 0.35) {
+  if (!Number.isFinite(lucarioWalk.yAt) || Math.abs(x - lucarioWalk.yAt) > 0.35) {
     lucario.mesh.position.y = groundHeight(x, lucarioWalk.z);
     lucarioWalk.yAt = x;
   }
   lucario.mesh.position.z = lucarioWalk.z;
-  lucario.setFacing(along < length ? -1 : 1);
   if (!lucarioInteraction || performance.now() >= lucarioInteraction.until) {
     lucarioInteraction = null;
+    lucario.setFacing(along < length ? -1 : 1);
     lucario.setPose("walk");
   }
 }
@@ -1789,6 +1789,26 @@ function interactLucario(action) {
   showBubble(lucario.mesh, phrases[Math.floor(Math.random() * phrases.length)]);
 }
 
+const lucarioPrompt = Object.assign(document.createElement("div"), { id: "lucario-prompt" });
+Object.assign(lucarioPrompt.style, {
+  position: "fixed", transform: "translate(-50%, -100%)", zIndex: "4",
+  display: "none", gap: "6px", padding: "6px", borderRadius: "7px",
+  background: "rgba(10,11,16,.9)", border: "1px solid rgba(255,255,255,.2)",
+  color: "#F2F2F5", font: "10px Silkscreen, monospace", whiteSpace: "nowrap",
+});
+const makeLucarioAction = (key, label, action) => {
+  const button = Object.assign(document.createElement("button"), { type: "button", textContent: MOBILE ? label : key + " · " + label });
+  Object.assign(button.style, {
+    font: "inherit", color: "#F2F2F5", background: "rgba(255,255,255,.06)",
+    border: "1px solid rgba(255,255,255,.2)", borderRadius: "5px", padding: "6px 8px",
+    cursor: "pointer",
+  });
+  button.addEventListener("click", (e) => { interactLucario(action); e.currentTarget.blur(); });
+  return button;
+};
+lucarioPrompt.append(makeLucarioAction("E", "fazer carinho", "pet"), makeLucarioAction("R", "sentir aura", "aura"));
+document.body.append(lucarioPrompt);
+
 function updateLucario() {
   const t = roomNow();
   walkLucario(t);
@@ -1799,6 +1819,13 @@ function updateLucario() {
   lucario.update(t);
   lucario.mesh.rotation.set(camera.rotation.x * 0.5, 0, 0);
   lucario.aura.position.set(lucario.mesh.position.x, lucario.mesh.position.y + 0.08, lucario.mesh.position.z);
+  const showPrompt = nearLucario() && !typing() && !bubbles.has(lucario.mesh);
+  lucarioPrompt.style.display = showPrompt ? "flex" : "none";
+  if (showPrompt) {
+    _v.set(lucario.mesh.position.x, lucario.mesh.position.y + 6.2, lucario.mesh.position.z).project(camera);
+    lucarioPrompt.style.left = `${(_v.x * 0.5 + 0.5) * innerWidth}px`;
+    lucarioPrompt.style.top = `${(-_v.y * 0.5 + 0.5) * innerHeight}px`;
+  }
 }
 
 
