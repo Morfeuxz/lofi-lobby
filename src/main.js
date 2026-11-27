@@ -1701,61 +1701,55 @@ scene.add(lucario.mesh, lucario.aura);
 lucario.mesh.visible = false; // show only after the town geometry has loaded
 lucario.mesh.position.set(0, 0, 0);
 const lucarioWalk = { on: false, min: 0, max: 0, z: 0, yAt: NaN };
-const LUCARIO_SPEED = 1.15;
+const LUCARIO_SPEED = 0.52;
 let lucarioInteraction = null; // private to this player; never changes the shared route
 
 function placeLucarioWalk() {
+  // The capybara owns the lower road. Lucario patrols the central village crossroad
+  // (the east-west path around z=-6), with deterministic sampling on every client.
   let best = null;
-  // Find the longest clear east-west stretch away from the capybara, board and furniture.
-  // Sampling the same static town geometry on every client gives every player the same route.
-  const minX = Math.ceil((townBox.min.x + 3) * 2) / 2;
-  const maxX = Math.floor((townBox.max.x - 3) * 2) / 2;
-  for (let z = 8; z <= 17; z += 1.5) {
+  const minX = Math.ceil((townBox.min.x + 5) * 2) / 2;
+  const maxX = Math.floor((townBox.max.x - 5) * 2) / 2;
+  const lanes = [-6, -3, 0, 3, 6, -9, 9];
+  for (const z of lanes) {
     let start = NaN;
     for (let x = minX; x <= maxX + 0.5; x += 0.5) {
-      // Lucario's sprite is wider than a trainer. Check the whole footprint, not
-      // only its center, so the patrol lane cannot skim a house wall or roof.
       const clear = x <= maxX &&
-        isOpen(x, z, 2.6) &&
-        Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) > 5.5 &&
-        Math.hypot(x - board.position.x, z - board.position.z) > 6 &&
-        lampPosts.every((l) => Math.hypot(l.position.x - x, l.position.z - z) > 3.5) &&
-        benches.every((b) => Math.hypot(b.x - x, b.z - z) > 4);
+        isOpen(x, z, 2.35) &&
+        Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) > 9 &&
+        Math.hypot(x - board.position.x, z - board.position.z) > 7 &&
+        lampPosts.every((l) => Math.hypot(l.position.x - x, l.position.z - z) > 4.2) &&
+        benches.every((b) => Math.hypot(b.x - x, b.z - z) > 4.8);
       if (clear) {
         if (Number.isNaN(start)) start = x;
       } else if (!Number.isNaN(start)) {
         const end = x - 0.5;
-        if (!best || end - start > best.max - best.min) best = { min: start, max: end, z };
+        const candidate = { min: start, max: end, z };
+        const score = (candidate.max - candidate.min) - Math.abs(z + 6) * 0.65;
+        const bestScore = best ? (best.max - best.min) - Math.abs(best.z + 6) * 0.65 : -Infinity;
+        if (score > bestScore) best = candidate;
         start = NaN;
       }
     }
     if (!Number.isNaN(start)) {
-      const end = maxX;
-      if (!best || end - start > best.max - best.min) best = { min: start, max: end, z };
+      const candidate = { min: start, max: maxX, z };
+      const score = (candidate.max - candidate.min) - Math.abs(z + 6) * 0.65;
+      const bestScore = best ? (best.max - best.min) - Math.abs(best.z + 6) * 0.65 : -Infinity;
+      if (score > bestScore) best = candidate;
     }
   }
-  if (!best || best.max - best.min < 7) {
-    // If this map version has no suitable patrol lane, keep Lucario safely off the main spawn.
-    for (let z = 8; z <= 18; z += 0.5) {
-      for (let x = minX; x <= maxX; x += 0.5) {
-        if (isOpen(x, z, 2.4) &&
-            Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) > 5 &&
-            Math.hypot(x - board.position.x, z - board.position.z) > 6 &&
-            lampPosts.every((l) => Math.hypot(l.position.x - x, l.position.z - z) > 3.5) &&
-            benches.every((b) => Math.hypot(b.x - x, b.z - z) > 4)) {
-          lucario.mesh.position.set(x, groundHeight(x, z), z);
-          lucario.mesh.visible = true;
-          lucarioWalk.on = false;
-          return;
-        }
-      }
-    }
+
+  if (!best || best.max - best.min < 8) {
+    // Never spawn inside a building if this map variant has no safe central lane.
     lucario.mesh.visible = false;
+    lucarioWalk.on = false;
     return;
   }
+
   lucario.mesh.visible = true;
-  Object.assign(lucarioWalk, { on: true, ...best });
-  lucario.mesh.position.set((best.min + best.max) / 2, groundHeight((best.min + best.max) / 2, best.z), best.z);
+  Object.assign(lucarioWalk, { on: true, ...best, yAt: NaN });
+  const centerX = (best.min + best.max) / 2;
+  lucario.mesh.position.set(centerX, groundHeight(centerX, best.z), best.z);
 }
 
 function walkLucario(t) {
@@ -1787,7 +1781,7 @@ function nearLucario() {
 function interactLucario(action) {
   if (!nearLucario() || (lucarioInteraction && performance.now() < lucarioInteraction.until)) return;
   lucario.setFacing(pos.x < lucario.mesh.position.x ? -1 : 1);
-  lucarioInteraction = { action, until: performance.now() + (action === "aura" ? 2600 : 2100) };
+  lucarioInteraction = { action, until: performance.now() + (action === "aura" ? 2400 : 1800) };
   lucario.setPose(action === "aura" ? "aura" : "pet");
   const phrases = action === "aura"
     ? ["Lucario fecha os olhos. Uma aura azul envolve vocês por um instante.", "Ele parece perceber algo tranquilo na sua aura.", "Por um momento, vocês conseguem se entender sem palavras."]
