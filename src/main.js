@@ -4422,11 +4422,11 @@ let eNow = null;
  */
 function eAction(seat = nearestFreeSeat()) {
   if (gamePaused || wall.isOpen()) return null;
-  const p = fishing.phase();
-  if (p === "focus" || p === "bite") return "fish";
   if (mySeat >= 0) return "stand";
   if (nearBoard()) return "wall";
   if (nearLucario()) return "lucario";
+  const p = fishing.phase();
+  if (p === "focus" || p === "bite") return "fish";
   const animal = closestAnimal();
   if (animal) return animal.kind;
   const spot = fishSpot();
