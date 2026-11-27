@@ -4250,7 +4250,7 @@ lucarioPrompt.append(makeLucarioAction("E","fazer carinho","pet"),makeLucarioAct
 document.body.append(lucarioPrompt);
 function updateLucario(){
   const t=roomNow();walkLucario(t);
-  lucario.update(t);
+  lucario.update(performance.now());
   lucario.mesh.rotation.set(camera.rotation.x*.5,0,0);
   lucario.aura.position.set(lucario.mesh.position.x,lucario.mesh.position.y+.08,lucario.mesh.position.z);
   const show=nearLucario()&&!typing()&&!bubbles.has(lucario.mesh);
