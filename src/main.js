@@ -4240,11 +4240,12 @@ function lucarioTarget(slot,previous=-1,actors=[]){
   // given room-clock slot, while the route still feels different each time.
   let seed=(Math.imul(slot+1,0x45d9f3b)^0x6d2b79f5)>>>0;
   seed^=seed>>>16;seed=Math.imul(seed,0x45d9f3b);seed^=seed>>>16;
+  const current=lucario.mesh.position;
   const candidates=lucarioPatrolNodes.filter(i=>i!==previous&&
     actors.every(actor=>{
       const n=catNav.nodes[i];
       return Math.hypot(n.x-actor.x,n.z-actor.z)>actor.r+1.2;
-    }));
+    })&&Math.hypot(catNav.nodes[i].x-current.x,catNav.nodes[i].z-current.z)>6);
   return candidates.length?candidates[(seed>>>0)%candidates.length]:lucarioPatrolNodes[0];
 }
 function lucarioNearestPatrolNode(x,z){
