@@ -1710,11 +1710,10 @@ function placeLucarioWalk() {
   // Sampling the same static town geometry on every client gives every player the same route.
   const minX = Math.ceil((townBox.min.x + 3) * 2) / 2;
   const maxX = Math.floor((townBox.max.x - 3) * 2) / 2;
-  for (let z = 8; z <= 17; z += 0.5) {
+  for (let z = 8; z <= 17; z += 1.5) {
     let start = NaN;
     for (let x = minX; x <= maxX + 0.5; x += 0.5) {
       const clear = x <= maxX &&
-        isOpen(x, z, 1.1) &&
         !inPond(x, z) &&
         !insideSolid(x, z, 1.1, 1.1) &&
         Math.abs(topHeight(x, z) - groundHeight(x, z)) < 0.4 &&
@@ -1739,8 +1738,12 @@ function placeLucarioWalk() {
     // If this map version has no suitable patrol lane, keep Lucario safely off the main spawn.
     for (let z = 8; z <= 18; z += 0.5) {
       for (let x = minX; x <= maxX; x += 0.5) {
-        if (isOpen(x, z, 1) && Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) > 5 &&
-            Math.hypot(x - board.position.x, z - board.position.z) > 6) {
+        if (!inPond(x, z) && !insideSolid(x, z, 1, 1) &&
+            Math.abs(topHeight(x, z) - groundHeight(x, z)) < 0.4 &&
+            Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) > 5 &&
+            Math.hypot(x - board.position.x, z - board.position.z) > 6 &&
+            lampPosts.every((l) => Math.hypot(l.position.x - x, l.position.z - z) > 3) &&
+            benches.every((b) => Math.hypot(b.x - x, b.z - z) > 3.5)) {
           lucario.mesh.position.set(x, groundHeight(x, z), z);
           lucario.mesh.visible = true;
           lucarioWalk.on = false;
@@ -1858,7 +1861,7 @@ function isFree(x, z, currentY) {
   const toCapy = Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z);
   if (toCapy < CAPY_RADIUS + BODY_RADIUS * 0.5 && toCapy < Math.hypot(pos.x - capy.mesh.position.x, pos.z - capy.mesh.position.z)) return false;
   const toLucario = Math.hypot(x - lucario.mesh.position.x, z - lucario.mesh.position.z);
-  if (toLucario < LUCARIO_RADIUS + BODY_RADIUS * 0.5 && toLucario < Math.hypot(pos.x - lucario.mesh.position.x, pos.z - lucario.mesh.position.z)) return false;
+  if (lucario.mesh.visible && toLucario < LUCARIO_RADIUS + BODY_RADIUS * 0.5 && toLucario < Math.hypot(pos.x - lucario.mesh.position.x, pos.z - lucario.mesh.position.z)) return false;
   if (Math.abs(x - board.position.x) < 3.8 + BODY_RADIUS * 0.5 && Math.abs(z - board.position.z) < 0.5 + BODY_RADIUS * 0.5) return false;
   for (const p of lampPosts)
     if (
