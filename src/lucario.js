@@ -72,7 +72,9 @@ export function createLucario() {
 
   const geometryFor = (sheet) => {
     const geometry = new THREE.PlaneGeometry(sheet.frameWidth / sheet.frameHeight, 1);
-    geometry.translate(0, .5, 0);
+    // The source frames leave a few transparent pixels below the drawn feet.
+    // Lower the visible sprite slightly so its soles meet the ground shadow.
+    geometry.translate(0, .46, 0);
     return geometry;
   };
   const initial = sheets.idle;
@@ -93,7 +95,8 @@ export function createLucario() {
     alphaTest: .5,
   });
   mesh.castShadow = true;
-  mesh.scale.set(4.5, 4.5, 1);
+  // Slightly larger than before, while staying close to the capybara/trainer scale.
+  mesh.scale.set(5.0, 5.0, 1);
 
   const aura = createAura();
   let pose = "idle";

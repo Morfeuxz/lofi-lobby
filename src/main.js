@@ -2676,7 +2676,7 @@ lucarioShadowGradient.addColorStop(1,"rgba(0,0,0,0)");
 lucarioShadowCtx.fillStyle=lucarioShadowGradient;
 lucarioShadowCtx.fillRect(0,0,64,64);
 const lucarioGroundShadow=new THREE.Mesh(
-  new THREE.PlaneGeometry(2.5,1.05),
+  new THREE.PlaneGeometry(2.9,1.3),
   new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(lucarioShadowCanvas),transparent:true,depthWrite:false,side:THREE.DoubleSide}),
 );
 lucarioGroundShadow.rotation.x=-Math.PI/2;
@@ -4365,7 +4365,8 @@ function updateLucario(){
   lucario.mesh.rotation.set(camera.rotation.x*.5,0,0);
   const lx=lucario.mesh.position.x,lz=lucario.mesh.position.z;
   lucarioGroundShadow.visible=lucario.mesh.visible;
-  lucarioGroundShadow.position.set(lx,groundHeight(lx,lz)+.035,lz);
+  // Keep the shadow almost flush with the sampled ground to avoid a visible gap.
+  lucarioGroundShadow.position.set(lx,groundHeight(lx,lz)+.012,lz);
   lucarioGroundShadow.material.opacity=lucarioInteraction?.action === "aura" ? 0.32 : 0.52;
   lucario.aura.position.set(lx,lucario.mesh.position.y+.08,lz);
   const show=nearLucario()&&!typing()&&!bubbles.has(lucario.mesh);
