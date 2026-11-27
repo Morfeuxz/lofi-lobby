@@ -7,6 +7,7 @@ import { createStones } from "./stones.js";
 import { addSitFrames, sitFramePos } from "./ground-sit.js";
 import { createCapybara, CAPY_NEAR, CAPY_RADIUS, PHRASES as CAPY_PHRASES } from "./capybara.js";
 import { createOwl } from "./owl.js";
+import { createLucario, LUCARIO_NEAR, LUCARIO_RADIUS } from "./lucario.js";
 import { createFishing, createFishingGear, FISH_NEAR, FISH_LEAVE } from "./fishing.js";
 import { createCat, CATS, CAT_NEAR, CAT_SIT_MS, CAT_RIDE_MS, PHRASES as CAT_PHRASES, RIDE_PHRASES as CAT_RIDE_PHRASES } from "./cat.js";
 import { CAROUSEL, carouselSeat, createCarousel, inClearing, isCarouselSeat, onCarousel } from "./carousel.js";
@@ -328,6 +329,7 @@ function prepareTown(fbx) {
     mergeTown(fbx);
     markLampShadowsStale(); // the town, the lamps and everything around them just took their places
     buildCatNavGrid();
+    placeLucarioWalk();
 }
 
 // ---- The fair: carousel and Ferris wheel ----
@@ -1466,8 +1468,9 @@ rainBtn.addEventListener("click", (e) => {
   e.currentTarget.blur(); // give the keyboard back to the game
 });
 addEventListener("keydown", (e) => {
-  const typing = ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName);
-  if (!typing && !e.repeat && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "r") toggleRain();
+  const typing = ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+  if (typing || e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== "r") return;
+  if (nearLucario()) interactLucario("aura"); else toggleRain();
 });
 
 // ---- Fireflies ----
@@ -2332,6 +2335,8 @@ function isFree(x, z, currentY) {
   // the capybara is solid, but it moves: a step that takes you away from it is always allowed
   const toCapy = Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z);
   if (toCapy < CAPY_RADIUS + BODY_RADIUS * 0.5 && toCapy < Math.hypot(pos.x - capy.mesh.position.x, pos.z - capy.mesh.position.z)) return false;
+  const toLucario = Math.hypot(x - lucario.mesh.position.x, z - lucario.mesh.position.z);
+  if (lucario.mesh.visible && toLucario < LUCARIO_RADIUS + BODY_RADIUS * 0.5 && toLucario < Math.hypot(pos.x - lucario.mesh.position.x, pos.z - lucario.mesh.position.z)) return false;
   if (Math.abs(x - board.position.x) < 3.8 + BODY_RADIUS * 0.5 && Math.abs(z - board.position.z) < 0.5 + BODY_RADIUS * 0.5) return false;
   for (const p of lampPosts)
     if (
@@ -2657,6 +2662,10 @@ gl_Position.z = (feetClip.z / feetClip.w) * gl_Position.w;`,
 const myFeet = useFeetDepth(sprite);
 const capyFeet = useFeetDepth(capy.mesh);
 const owlFeet = useFeetDepth(owl.mesh);
+const lucario = createLucario();
+scene.add(lucario.mesh, lucario.aura);
+lucario.mesh.visible = false;
+const lucarioFeet = useFeetDepth(lucario.mesh);
 const _toCam = new THREE.Vector3();
 const occlusionRay = new THREE.Ray();
 const _hit = new THREE.Vector3();
@@ -2688,6 +2697,7 @@ function updateOcclusion() {
   setFeet(myFeet, pos.x + slide.x, pos.y, pos.z + slide.z);
   setFeet(capyFeet, capy.mesh.position.x, capy.mesh.position.y, capy.mesh.position.z);
   setFeet(owlFeet, owl.mesh.position.x, owl.mesh.position.y, owl.mesh.position.z);
+  if (lucario.mesh.visible) setFeet(lucarioFeet, lucario.mesh.position.x, lucario.mesh.position.y, lucario.mesh.position.z);
   for (const o of others.values()) setFeet(o.feet, o.mesh.position.x, o.mesh.position.y, o.mesh.position.z);
   // After trainers: a perched cat shares its rider's depth nudged slightly forward so it sits
   // over the cap without Z-fighting while still hiding behind walls/benches in front of the rider.
@@ -4105,6 +4115,100 @@ catPrompt.addEventListener("click", (e) => {
   e.currentTarget.blur(); // give the keyboard back to the game
 });
 document.body.append(catPrompt);
+// ---- Lucario: permanent NPC using the town's shared cat navigation grid ----
+const LUCARIO_LEG_MS=28000;
+let lucarioPatrolNodes=[];
+let lucarioInteraction=null; // local reaction only; never changes the shared patrol
+function placeLucarioWalk(){
+  const nodes=catNav.nodes;
+  if(!nodes.length){lucario.mesh.visible=false;return;}
+  const center=townBox.getCenter(new THREE.Vector3());
+  const suitable=(node,maxCenter,minCapy)=>
+    Math.hypot(node.x-center.x,node.z-center.z)<maxCenter&&
+    Math.hypot(node.x-capy.mesh.position.x,node.z-capy.mesh.position.z)>minCapy&&
+    Math.hypot(node.x-board.position.x,node.z-board.position.z)>8&&
+    lampPosts.every(p=>Math.hypot(p.position.x-node.x,p.position.z-node.z)>3.5)&&
+    benches.every(b=>Math.hypot(b.x-node.x,b.z-node.z)>4.5);
+  let candidates=nodes.map((node,index)=>({node,index})).filter(({node})=>suitable(node,27,11));
+  if(candidates.length<8)candidates=nodes.map((node,index)=>({node,index})).filter(({node})=>suitable(node,32,8));
+  if(candidates.length<2)candidates=nodes.map((node,index)=>({node,index})).filter(({node})=>Math.hypot(node.x-capy.mesh.position.x,node.z-capy.mesh.position.z)>8);
+  lucarioPatrolNodes=candidates.map(({index})=>index);
+  if(lucarioPatrolNodes.length<2){lucario.mesh.visible=false;return;}
+  const first=nodes[lucarioPatrolNodes[0]];
+  lucario.mesh.position.set(first.x,first.y,first.z);lucario.mesh.visible=true;
+}
+function lucarioTarget(slot){
+  const n=lucarioPatrolNodes.length;
+  const i=((slot*17+11)%n+n)%n;
+  return lucarioPatrolNodes[i];
+}
+function walkLucario(t){
+  const nodes=catNav.nodes;
+  if(!lucario.mesh.visible||lucarioPatrolNodes.length<2||!nodes.length){lucario.setPose("idle");return;}
+  if(lucarioInteraction&&performance.now()<lucarioInteraction.until)return;
+  const slot=Math.floor(t/LUCARIO_LEG_MS);
+  const path=findCatPath(lucarioTarget(slot-1),lucarioTarget(slot));
+  if(path.length<2){const node=nodes[lucarioTarget(slot)];lucario.mesh.position.set(node.x,node.y,node.z);lucario.setPose("idle");return;}
+  const {cumDist,totalDist}=measurePath(path);
+  const progress=(t-slot*LUCARIO_LEG_MS)/LUCARIO_LEG_MS;
+  const point=samplePathPoint(path,cumDist,totalDist,totalDist*progress);
+  lucario.mesh.position.set(point.x,point.y,point.z);
+  const directions={right:[1,0],left:[-1,0],down:[0,1],up:[0,-1]};
+  const [dx,dz]=directions[point.dir]||[0,0];lucario.setDirection(dx,dz);
+}
+function nearLucario(){
+  return lucario.mesh.visible&&!gamePaused&&mySeat<0&&!wall.isOpen()&&!nearBoard()&&
+    Math.hypot(pos.x-lucario.mesh.position.x,pos.z-lucario.mesh.position.z)<LUCARIO_NEAR;
+}
+function interactLucario(action){
+  if(!nearLucario()||(lucarioInteraction&&performance.now()<lucarioInteraction.until))return;
+  lucario.setFacing(pos.x<lucario.mesh.position.x?-1:1);
+  lucarioInteraction={action,until:performance.now()+(action==="aura"?2400:1900)};
+  lucario.setPose(action==="aura"?"aura":"pet");
+  const phrases=action==="aura"
+    ?["Lucario fecha os olhos. Uma aura azul envolve vocês por um instante.","Ele parece perceber algo tranquilo na sua aura.","Por um momento, vocês conseguem se entender sem palavras."]
+    :["Lucario abaixa a cabeça, aceitando o carinho.","Lucario parece gostar da sua companhia.","Ele fecha os olhos e solta um pequeno suspiro satisfeito."];
+  showBubble(lucario.mesh,phrases[Math.floor(Math.random()*phrases.length)]);
+}
+const lucarioPrompt=Object.assign(document.createElement("div"),{id:"lucario-prompt"});
+Object.assign(lucarioPrompt.style,{
+  position:"fixed",transform:"translate(-50%,-100%)",zIndex:"4",display:"none",gap:"6px",
+  padding:"6px",borderRadius:"7px",background:"rgba(10,11,16,.9)",
+  border:"1px solid rgba(255,255,255,.2)",color:"#F2F2F5",font:"10px Silkscreen, monospace",whiteSpace:"nowrap",
+});
+const makeLucarioAction=(key,label,action)=>{
+  const button=Object.assign(document.createElement("button"),{type:"button",textContent:MOBILE?label:key+" · "+label});
+  Object.assign(button.style,{font:"inherit",color:"#F2F2F5",background:"rgba(255,255,255,.06)",
+    border:"1px solid rgba(255,255,255,.2)",borderRadius:"5px",padding:"6px 8px",cursor:"pointer"});
+  button.addEventListener("click",e=>{interactLucario(action);e.currentTarget.blur();});
+  return button;
+};
+lucarioPrompt.append(makeLucarioAction("E","fazer carinho","pet"),makeLucarioAction("R","sentir aura","aura"));
+document.body.append(lucarioPrompt);
+function updateLucario(){
+  const t=roomNow();walkLucario(t);
+  if(lucarioInteraction&&performance.now()>=lucarioInteraction.until){
+    lucarioInteraction=null;
+    const slot=Math.floor(t/LUCARIO_LEG_MS);
+    const path=findCatPath(lucarioTarget(slot-1),lucarioTarget(slot));
+    if(path.length>1){
+      const {cumDist,totalDist}=measurePath(path);
+      const point=samplePathPoint(path,cumDist,totalDist,totalDist*((t-slot*LUCARIO_LEG_MS)/LUCARIO_LEG_MS));
+      const directions={right:[1,0],left:[-1,0],down:[0,1],up:[0,-1]};
+      const [dx,dz]=directions[point.dir]||[0,0];lucario.setDirection(dx,dz);
+    }else lucario.setPose("idle");
+  }
+  lucario.update(t);
+  lucario.mesh.rotation.set(camera.rotation.x*.5,0,0);
+  lucario.aura.position.set(lucario.mesh.position.x,lucario.mesh.position.y+.08,lucario.mesh.position.z);
+  const show=nearLucario()&&!typing()&&!bubbles.has(lucario.mesh);
+  lucarioPrompt.style.display=show?"flex":"none";
+  if(show){
+    _v.set(lucario.mesh.position.x,lucario.mesh.position.y+6.2,lucario.mesh.position.z).project(camera);
+    lucarioPrompt.style.left=`${(_v.x*.5+.5)*innerWidth}px`;
+    lucarioPrompt.style.top=`${(-_v.y*.5+.5)*innerHeight}px`;
+  }
+}
 // Pick at most one closest animal in interaction range so prompts and E never collide.
 function closestAnimal() {
   if (mySeat >= 0 || nearBoard()) return null;
@@ -4322,6 +4426,7 @@ function eAction(seat = nearestFreeSeat()) {
   if (p === "focus" || p === "bite") return "fish";
   if (mySeat >= 0) return "stand";
   if (nearBoard()) return "wall";
+  if (nearLucario()) return "lucario";
   const animal = closestAnimal();
   if (animal) return animal.kind;
   const spot = fishSpot();
@@ -4335,6 +4440,7 @@ function doE(action = eAction()) {
   else if (action === "wall") wall.show();
   else if (action === "capy") feedCapy();
   else if (action === "cat") feedCat(nearCat());
+  else if (action === "lucario") interactLucario("pet");
   else if (action === "stand" || action === "sit") toggleSit();
 }
 addEventListener("keydown", (e) => {
@@ -4518,6 +4624,7 @@ function loop() {
   owl.mesh.rotation.set(camera.rotation.x * 0.5, 0, 0); // faces the camera like the trainers
   updateFishing();
   updateCats();
+  updateLucario();
   updateOcclusion();
   // facing the camera, tilted only halfway (the shadow looks like a standing body)
   sprite.rotation.set(camera.rotation.x * 0.5, 0, 0);
@@ -4529,7 +4636,7 @@ function loop() {
   // someone going round would make them redraw their 6 shadow passes every frame, all night
   sprite.castShadow = !riding;
   const movers = [...others.values()].filter((o) => !isRideSeat(o.seat)).map((o) => o.mesh);
-  updateLampShadows([...(riding ? [] : [sprite]), capy.mesh, owl.mesh, ...cats.map((c) => c.mesh), ...movers]);
+  updateLampShadows([...(riding ? [] : [sprite]), capy.mesh, owl.mesh, lucario.mesh, ...cats.map((c) => c.mesh), ...movers]);
   renderer.render(scene, camera);
   updateNameTags();
   updateBubbles();
