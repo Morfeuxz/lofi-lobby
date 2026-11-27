@@ -10,22 +10,18 @@ const TICK_MS = 1000 / 60;
 const SHEETS = {
   walk: {
     file: "Walk-Anim.png", columns: 4, rows: 8, frameWidth: 32, frameHeight: 48,
-    footAnchor: 0.37,
     durations: [6, 6, 6, 6],
   },
   idle: {
     file: "Idle-Anim.png", columns: 6, rows: 8, frameWidth: 32, frameHeight: 56,
-    footAnchor: 0.35,
     durations: [40, 2, 2, 4, 2, 2],
   },
   pet: {
     file: "Nod-Anim.png", columns: 3, rows: 8, frameWidth: 32, frameHeight: 48,
-    footAnchor: 0.37,
     durations: [6, 8, 6],
   },
   aura: {
     file: "Charge-Anim.png", columns: 10, rows: 8, frameWidth: 32, frameHeight: 40,
-    footAnchor: 0.36,
     durations: Array(10).fill(2),
   },
 };
@@ -74,13 +70,35 @@ export function createLucario() {
     return [pose, { ...config, texture }];
   }));
 
-  const geometryFor = (sheet) => {
-    const geometry = new THREE.PlaneGeometry(sheet.frameWidth / sheet.frameHeight, 1);
-    // Each animation sheet has a different transparent bottom margin.
-    // Anchor the last opaque pixel row to the ground instead of aligning the
-    // full transparent frame rectangle; this prevents the sprite hovering.
-    geometry.translate(0, sheet.footAnchor, 0);
-    return geometry;
+  // Measure the opaque bottom edge per pose, direction and frame. This removes
+  // transparent atlas padding instead of guessing a single offset per animation.
+  const geometryFor = (sheet) => new THREE.PlaneGeometry(sheet.frameWidth / sheet.frameHeight, 1);
+  let currentFootAnchor = 0.5;
+  const frameAnchor = (sheet, frame, row) => {
+    const image = sheet.texture.image;
+    if (!image?.width || !image?.height) return null;
+    if (!sheet.alphaPixels) {
+      try {
+        const canvas = Object.assign(document.createElement("canvas"), { width: image.width, height: image.height });
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(image, 0, 0);
+        sheet.alphaPixels = ctx.getImageData(0, 0, image.width, image.height).data;
+      } catch { return null; }
+    }
+    sheet.footAnchors ??= new Map();
+    const key = row * sheet.columns + frame;
+    if (sheet.footAnchors.has(key)) return sheet.footAnchors.get(key);
+    const pixels = sheet.alphaPixels, x0 = frame * sheet.frameWidth, y0 = row * sheet.frameHeight;
+    let bottom = -1;
+    for (let y = sheet.frameHeight - 1; y >= 0 && bottom < 0; y--) {
+      const py = (y0 + y) * image.width;
+      for (let x = 0; x < sheet.frameWidth; x++) {
+        if (pixels[(py + x0 + x) * 4 + 3] >= 128) { bottom = y; break; }
+      }
+    }
+    const anchor = bottom < 0 ? 0.5 : 0.5 - (sheet.frameHeight - bottom - 1) / sheet.frameHeight;
+    sheet.footAnchors.set(key, anchor);
+    return anchor;
   };
   const initial = sheets.idle;
   const material = new THREE.MeshLambertMaterial({
@@ -110,12 +128,16 @@ export function createLucario() {
   let poseStartedAt = performance.now();
 
   const setFrame = (frame, sheet) => {
-    if (frame === lastFrame) return;
-    lastFrame = frame;
-    sheet.texture.offset.set(
-      frame / sheet.columns,
-      1 - (directionRow + 1) / sheet.rows,
-    );
+    if (frame !== lastFrame) {
+      lastFrame = frame;
+      sheet.texture.offset.set(frame / sheet.columns, 1 - (directionRow + 1) / sheet.rows);
+    }
+    // TextureLoader is asynchronous: retry until the image pixels are available.
+    const anchor = frameAnchor(sheet, frame, directionRow);
+    if (anchor !== null && Math.abs(anchor - currentFootAnchor) > 0.0001) {
+      mesh.geometry.translate(0, anchor - currentFootAnchor, 0);
+      currentFootAnchor = anchor;
+    }
   };
 
   const setPose = (next) => {
@@ -128,6 +150,7 @@ export function createLucario() {
     const sheet = sheets[pose];
     mesh.geometry.dispose();
     mesh.geometry = geometryFor(sheet);
+    currentFootAnchor = 0.5;
     material.map = sheet.texture;
     material.needsUpdate = true;
     mesh.customDepthMaterial.map = sheet.texture;
