@@ -4119,11 +4119,13 @@ document.body.append(catPrompt);
 const LUCARIO_LEG_MS=26000;
 const LUCARIO_SPEED=2.15; // slightly slower than the cats (2.4–2.7 units/s)
 let lucarioPatrolNodes=[];
+let lucarioPatrolSet=new Set();
 let lucarioInteraction=null; // local reaction only; never changes the shared patrol
 function placeLucarioWalk(){
   const nodes=catNav.nodes;
   if(!nodes.length){lucario.mesh.visible=false;return;}
   const center=townBox.getCenter(new THREE.Vector3());
+  // Keep Lucario in the open central plaza, away from the houses at the town's edge.
   const suitable=(node,maxCenter,minCapy)=>
     Math.hypot(node.x-center.x,node.z-center.z)<maxCenter&&
     node.z<capy.mesh.position.z-9&&
@@ -4131,13 +4133,36 @@ function placeLucarioWalk(){
     Math.hypot(node.x-board.position.x,node.z-board.position.z)>8&&
     lampPosts.every(p=>Math.hypot(p.position.x-node.x,p.position.z-node.z)>3.5)&&
     benches.every(b=>Math.hypot(b.x-node.x,b.z-node.z)>4.5);
-  let candidates=nodes.map((node,index)=>({node,index})).filter(({node})=>suitable(node,27,11));
-  if(candidates.length<8)candidates=nodes.map((node,index)=>({node,index})).filter(({node})=>suitable(node,32,8));
-  if(candidates.length<2)candidates=nodes.map((node,index)=>({node,index})).filter(({node})=>node.z<capy.mesh.position.z-7&&Math.hypot(node.x-capy.mesh.position.x,node.z-capy.mesh.position.z)>8);
+  let candidates=nodes.map((node,index)=>({node,index})).filter(({node})=>suitable(node,16,11));
+  if(candidates.length<8)candidates=nodes.map((node,index)=>({node,index})).filter(({node})=>suitable(node,19,9));
   lucarioPatrolNodes=candidates.map(({index})=>index);
+  lucarioPatrolSet=new Set(lucarioPatrolNodes);
   if(lucarioPatrolNodes.length<2){lucario.mesh.visible=false;return;}
   const first=nodes[lucarioPatrolNodes[0]];
   lucario.mesh.position.set(first.x,first.y,first.z);lucario.mesh.visible=true;
+}
+// Restrict every step of the route to the central-plaza nodes, not just its endpoints.
+function findLucarioPath(startIdx,endIdx){
+  const nodes=catNav.nodes;
+  if(startIdx===endIdx)return [nodes[startIdx]];
+  if(!lucarioPatrolSet.has(startIdx)||!lucarioPatrolSet.has(endIdx))return [nodes[startIdx]];
+  const parent=new Int32Array(nodes.length).fill(-1);
+  const queue=new Int32Array(nodes.length);
+  let head=0,tail=0;
+  parent[startIdx]=startIdx;queue[tail++]=startIdx;
+  while(head<tail){
+    const u=queue[head++];
+    if(u===endIdx)break;
+    for(const [v] of nodes[u].adj){
+      if(!lucarioPatrolSet.has(v)||parent[v]!==-1)continue;
+      parent[v]=u;queue[tail++]=v;
+      if(v===endIdx){head=tail;break;}
+    }
+  }
+  if(parent[endIdx]===-1)return [nodes[startIdx]];
+  const path=[];
+  for(let cur=endIdx;;cur=parent[cur]){path.push(nodes[cur]);if(cur===startIdx)break;}
+  return path.reverse();
 }
 function lucarioTarget(slot){
   const n=lucarioPatrolNodes.length;
@@ -4150,7 +4175,7 @@ function walkLucario(t){
   if(!lucario.mesh.visible||lucarioPatrolNodes.length<2||!nodes.length){lucario.setPose("idle");return;}
   if(lucarioInteraction&&performance.now()<lucarioInteraction.until)return;
   const slot=Math.floor(t/LUCARIO_LEG_MS);
-  const path=findCatPath(lucarioTarget(slot-1),lucarioTarget(slot));
+  const path=findLucarioPath(lucarioTarget(slot-1),lucarioTarget(slot));
   if(path.length<2){const node=nodes[lucarioTarget(slot)];lucario.mesh.position.set(node.x,node.y,node.z);lucario.setPose("idle");return;}
   const {cumDist,totalDist}=measurePath(path);
   const elapsed=t-slot*LUCARIO_LEG_MS;
@@ -4201,7 +4226,7 @@ function updateLucario(){
   if(lucarioInteraction&&performance.now()>=lucarioInteraction.until){
     lucarioInteraction=null;
     const slot=Math.floor(t/LUCARIO_LEG_MS);
-    const path=findCatPath(lucarioTarget(slot-1),lucarioTarget(slot));
+    const path=findLucarioPath(lucarioTarget(slot-1),lucarioTarget(slot));
     if(path.length>1){
       const {cumDist,totalDist}=measurePath(path);
       const point=samplePathPoint(path,cumDist,totalDist,totalDist*((t-slot*LUCARIO_LEG_MS)/LUCARIO_LEG_MS));
