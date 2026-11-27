@@ -1709,8 +1709,8 @@ function placeLucarioWalk() {
   // choosing a single straight road. The same geometry checks run for every client.
   const center = townBox.getCenter(new THREE.Vector3());
   const candidates = [];
-  for (let rx = 10; rx <= 19; rx += 1) {
-    for (let rz = 8; rz <= 16; rz += 1) {
+  for (const rx of [12, 14, 16]) {
+    for (const rz of [10, 12, 14]) {
       const chamfer = 4;
       const points = [
         [center.x - rx + chamfer, center.z - rz],
@@ -1831,7 +1831,7 @@ function updateLucario() {
   walkLucario(t);
   if (lucarioInteraction && performance.now() >= lucarioInteraction.until) {
     lucarioInteraction = null;
-    lucario.setPose(lucarioWalk.on ? "walk" : "idle");
+    if (!lucarioWalk.on) lucario.setPose("idle");
   }
   lucario.update(t);
   lucario.mesh.rotation.set(camera.rotation.x * 0.5, 0, 0);
