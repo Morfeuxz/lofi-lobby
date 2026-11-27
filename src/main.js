@@ -4291,8 +4291,7 @@ function lucarioClearOfFixedObjects(node){
     Math.hypot(node.x-board.position.x,node.z-board.position.z)>5.5&&
     lampPosts.every(p=>Math.hypot(p.position.x-node.x,p.position.z-node.z)>2.8)&&
     benches.every(b=>Math.hypot(b.x-node.x,b.z-node.z)>3.2)&&
-    !onCarousel(node.x,node.z,1.8)&&
-    !onWheel(node.x,node.z,1.8);
+    !onRide(node.x,node.z,1.8);
 }
 function placeLucarioWalk(){
   const nodes=catNav.nodes;
