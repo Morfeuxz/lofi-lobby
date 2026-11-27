@@ -373,7 +373,6 @@ function clearFairGround(root) {
   root.traverse((o) => {
     if (!o.isMesh || !/tree/i.test(o.name)) return;
     new THREE.Box3().setFromObject(o).getCenter(at);
-    if (inClearing(at.x, at.z) || inWheelClearing(at.x, at.z)) pines.push(o);
     if (inClearing(at.x, at.z) || inWheelClearing(at.x, at.z) || inCoasterClearing(at.x, at.z)) pines.push(o);
   });
   for (const o of pines) o.removeFromParent();
@@ -387,12 +386,10 @@ function placeFair() {
   wheel.root.position.y = groundHeight(WHEEL.x, WHEEL.z);
   coaster.root.position.y = groundHeight((COASTER.station.x0 + COASTER.station.x1) / 2, COASTER.station.z0 - 1);
   for (const p of fairPosts) p.position.y = groundHeight(p.position.x, p.position.z);
-  if (!fairPlaced) scene.add(carousel.root, wheel.root);
   if (!fairPlaced) scene.add(carousel.root, wheel.root, coaster.root);
   fairPlaced = true;
 }
 // the seats on a ride: their spot comes from the clock, they need no message while it turns
-const isRideSeat = (id) => isCarouselSeat(id) || isWheelSeat(id);
 const isRideSeat = (id) => isCarouselSeat(id) || isWheelSeat(id) || isCoasterSeat(id);
 // on the roller coaster while it is out on the track: no getting off until it is back at the station
 const strappedIn = () => isCoasterSeat(mySeat) && coasterRiding(roomNow());
@@ -3222,7 +3219,6 @@ function getOffWheel(notify) {
   mySeat = -1;
   if (s) {
     const z = WHEEL.z + WHEEL.halfDepth + 1.4;
-    const x0 = Math.max(WHEEL.x - WHEEL.halfWidth, Math.min(WHEEL.x + WHEEL.halfWidth, s.x));
     const x0 = Math.max(WHEEL.x - WHEEL.west, Math.min(WHEEL.x + WHEEL.east, s.x));
     search: for (let d = 0; d <= 6; d += 0.5)
       for (const x of [x0 + d, x0 - d]) {
