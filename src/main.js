@@ -319,6 +319,7 @@ function prepareTown(fbx) {
     board.position.y = groundHeight(board.position.x, board.position.z);
     placeCapybara();
     placeCapyWalk();
+    placeLucarioWalk(); // wait for town geometry before choosing the shared patrol lane
     mergeTown(fbx);
     markLampShadowsStale(); // the town, the lamps and everything around them just took their places
 }
@@ -1697,6 +1698,7 @@ function capyWasFed(m) {
 // ---- Lucario (a permanent, room-clock NPC; E pets, R senses aura) ----
 const lucario = createLucario();
 scene.add(lucario.mesh, lucario.aura);
+lucario.mesh.visible = false; // show only after the town geometry has loaded
 lucario.mesh.position.set(0, 0, 0);
 const lucarioWalk = { on: false, min: 0, max: 0, z: 0, yAt: NaN };
 const LUCARIO_SPEED = 1.15;
@@ -1706,10 +1708,12 @@ function placeLucarioWalk() {
   let best = null;
   // Find the longest clear east-west stretch away from the capybara, board and furniture.
   // Sampling the same static town geometry on every client gives every player the same route.
+  const minX = Math.ceil((townBox.min.x + 3) * 2) / 2;
+  const maxX = Math.floor((townBox.max.x - 3) * 2) / 2;
   for (let z = 8; z <= 17; z += 0.5) {
     let start = NaN;
-    for (let x = -20; x <= 20.5; x += 0.5) {
-      const clear = x <= 20 &&
+    for (let x = minX; x <= maxX + 0.5; x += 0.5) {
+      const clear = x <= maxX &&
         isOpen(x, z, 1.1) &&
         !inPond(x, z) &&
         !insideSolid(x, z, 1.1, 1.1) &&
@@ -1727,17 +1731,18 @@ function placeLucarioWalk() {
       }
     }
     if (!Number.isNaN(start)) {
-      const end = 20;
+      const end = maxX;
       if (!best || end - start > best.max - best.min) best = { min: start, max: end, z };
     }
   }
   if (!best || best.max - best.min < 7) {
     // If this map version has no suitable patrol lane, keep Lucario safely off the main spawn.
     for (let z = 8; z <= 18; z += 0.5) {
-      for (let x = -18; x <= 18; x += 0.5) {
+      for (let x = minX; x <= maxX; x += 0.5) {
         if (isOpen(x, z, 1) && Math.hypot(x - capy.mesh.position.x, z - capy.mesh.position.z) > 5 &&
             Math.hypot(x - board.position.x, z - board.position.z) > 6) {
           lucario.mesh.position.set(x, groundHeight(x, z), z);
+          lucario.mesh.visible = true;
           lucarioWalk.on = false;
           return;
         }
@@ -1746,6 +1751,7 @@ function placeLucarioWalk() {
     lucario.mesh.visible = false;
     return;
   }
+  lucario.mesh.visible = true;
   Object.assign(lucarioWalk, { on: true, ...best });
   lucario.mesh.position.set((best.min + best.max) / 2, groundHeight((best.min + best.max) / 2, best.z), best.z);
 }
@@ -1770,8 +1776,6 @@ function walkLucario(t) {
     lucario.setPose("walk");
   }
 }
-
-placeLucarioWalk();
 
 function nearLucario() {
   return !gamePaused && mySeat < 0 && !wall.isOpen() && !nearBoard() &&
