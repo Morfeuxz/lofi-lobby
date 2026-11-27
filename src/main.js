@@ -2711,7 +2711,7 @@ const lucarioFeet = useFeetDepth(lucario.mesh);
 // Use the same contact-shadow setup as the player: a flat circle with the
 // shared radial glow texture, placed directly on the sampled ground.
 const lucarioGroundShadow = new THREE.Mesh(
-  new THREE.CircleGeometry(0.85, 20),
+  new THREE.CircleGeometry(0.55, 20),
   new THREE.MeshBasicMaterial({
     map: glowTexture,
     color: 0x000000,
@@ -4512,7 +4512,7 @@ function updateLucario(){
   const show=nearLucario()&&!typing()&&!bubbles.has(lucario.mesh);
   lucarioPrompt.style.display=show?"flex":"none";
   if(show){
-    _v.set(lucario.mesh.position.x,lucario.mesh.position.y+6.2,lucario.mesh.position.z).project(camera);
+    _v.set(lucario.mesh.position.x,lucario.mesh.position.y+4.2,lucario.mesh.position.z).project(camera);
     lucarioPrompt.style.left=`${(_v.x*.5+.5)*innerWidth}px`;
     lucarioPrompt.style.top=`${(-_v.y*.5+.5)*innerHeight}px`;
   }

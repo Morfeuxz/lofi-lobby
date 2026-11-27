@@ -44,7 +44,7 @@ function createAura() {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const aura = new THREE.Mesh(
-    new THREE.PlaneGeometry(5.2, 5.2),
+    new THREE.PlaneGeometry(3.2, 3.2),
     new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
@@ -61,8 +61,10 @@ function createAura() {
 
 // One pixel of any sheet is always the same size in the world, so Lucario never
 // grows or shrinks when the pose or the frame changes. Lucario is ~25 px tall in
-// the sheets and mesh.scale (5.4) turns that into ~5.4 world units.
-const MESH_SCALE = 5.4;
+// the sheets and mesh.scale turns that into the same number of world units.
+// Reference heights: trainer ~3.75, cats ~3.05, so Lucario sits just above the cats.
+const LUCARIO_HEIGHT = 3.3;
+const MESH_SCALE = LUCARIO_HEIGHT;
 const UNITS_PER_PIXEL = 1 / 25;
 // Fallback ground rows (px from the top of a cell) used until the sheet pixels can be read.
 const DEFAULT_FOOT_ROW = { walk: 30, idle: 33, pet: 30, aura: 26 };
