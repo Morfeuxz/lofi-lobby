@@ -1778,7 +1778,7 @@ function walkLucario(t) {
 }
 
 function nearLucario() {
-  return !gamePaused && mySeat < 0 && !wall.isOpen() && !nearBoard() &&
+  return lucario.mesh.visible && !gamePaused && mySeat < 0 && !wall.isOpen() && !nearBoard() &&
     Math.hypot(pos.x - lucario.mesh.position.x, pos.z - lucario.mesh.position.z) < LUCARIO_NEAR;
 }
 
