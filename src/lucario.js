@@ -9,7 +9,8 @@ const FRAME_TIME = 360;
 const POSES = {
   idle: [1],
   horizontal: [6, 7, 8],
-  vertical: [0, 1, 2],
+  verticalDown: [0, 1, 2],
+  verticalUp: [3, 4],
   diagonal: [10, 11, 12, 13, 14],
   pet: [17],
   aura: [16],
@@ -91,8 +92,8 @@ export function createLucario() {
         pose = "horizontal";
         this.setFacing(dx < 0 ? -1 : 1);
       } else if (Math.abs(dz) > Math.abs(dx) * 1.35) {
-        pose = "vertical";
-        this.setFacing(dz < 0 ? -1 : 1);
+        pose = dz < 0 ? "verticalUp" : "verticalDown";
+        this.setFacing(-1);
       } else {
         pose = "diagonal";
         this.setFacing(dx < 0 ? -1 : 1);
